@@ -13,7 +13,7 @@ extern crate alloc;
 // This is experimental and requires alloc_prelude as a feature
 // use alloc::prelude::v1::*;
 
-use core::arch::{asm, global_asm};
+use core::arch::asm;
 
 // ///////////////////////////////////
 // / RUST MACROS

@@ -8,6 +8,6 @@ pub fn test() {
 	// MinixFileSystem::init(8);
 	// let path = "/bin/sh\0".as_bytes().as_ptr();
 	// syscall::syscall_execv(path,0);
-	println!("I should never get here, execv should destroy our process.");
+	// println!("I should never get here, execv should destroy our process.");
 }
 
