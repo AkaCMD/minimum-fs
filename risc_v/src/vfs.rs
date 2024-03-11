@@ -3,8 +3,8 @@
 // Stephen Marz
 // 4 June 2020
 
-use crate::fs::{MinixFileSystem, Inode, S_IFDIR, BLOCK_SIZE, DirEntry, FsError};
 use crate::buffer::Buffer;
+use crate::fs::{DirEntry, FsError, Inode, MinixFileSystem, BLOCK_SIZE, S_IFDIR};
 use crate::lock::Mutex;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
@@ -96,9 +96,11 @@ pub fn init(bdev: usize) {
         unsafe {
             CACHE = Some(btm);
         }
-    }
-    else {
-        panic!("KERNEL: Initialized an already initialized filesystem {}", bdev);
+    } else {
+        panic!(
+            "KERNEL: Initialized an already initialized filesystem {}",
+            bdev
+        );
     }
     unsafe {
         LOCK.unlock();
@@ -112,24 +114,21 @@ pub fn open(path: &str) -> Result<Entry, FsError> {
     // if we acquire the lock or false otherwise.
     if unsafe { LOCK.try_lock() } == false {
         return Err(FsError::Busy);
-    }
-    else if let Some(cache) = unsafe { CACHE.take() } {
+    } else if let Some(cache) = unsafe { CACHE.take() } {
         // If we get here, we've locked the mutex and were able to take the
         // global cache.
         if let Some(entry) = cache.get(path) {
             // If we get here, we have the lock, cache, and we found
             // the requested key (directory path)
             ret = Ok(*entry);
-        }
-        else {
+        } else {
             // If we get here, we didn't find the path in the cache.
             ret = Err(FsError::FileNotFound);
         }
         unsafe {
             CACHE.replace(cache);
         }
-    }
-    else {
+    } else {
         // If we get here, we got the lock, but couldn't take
         // the cache.
         ret = Err(FsError::Unavailable);
@@ -141,7 +140,7 @@ pub fn open(path: &str) -> Result<Entry, FsError> {
 }
 
 pub fn init_proc(dev: usize) {
-	init(dev);
+    init(dev);
 }
 
 pub fn add_gpu(dev: usize) {

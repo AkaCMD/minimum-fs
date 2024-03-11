@@ -7,14 +7,13 @@ use crate::vfs::Entry;
 
 #[derive(Copy, Clone)]
 pub enum DescriptorType {
-	File(Entry),
-	Device,
-	Framebuffer,
-	ButtonEvents,
-	AbsoluteEvents,
-	ConsoleIn,
-	ConsoleOut,
-	Network,
-	Unknown,
+    File(Entry),
+    Device,
+    Framebuffer,
+    ButtonEvents,
+    AbsoluteEvents,
+    ConsoleIn,
+    ConsoleOut,
+    Network,
+    Unknown,
 }
-
