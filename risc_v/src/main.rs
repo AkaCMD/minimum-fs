@@ -4,13 +4,8 @@
 #![no_main]
 #![no_std]
 #![feature(panic_info_message,
-           asm,
-		   llvm_asm,
-		   global_asm,
            allocator_api,
            alloc_error_handler,
-           alloc_prelude,
-		   const_raw_ptr_to_usize_cast,
 		   lang_items)]
 
 #[lang = "eh_personality"] extern fn eh_personality() {}
@@ -19,6 +14,8 @@
 extern crate alloc;
 // This is experimental and requires alloc_prelude as a feature
 // use alloc::prelude::v1::*;
+
+use core::arch::{asm, global_asm};
 
 // ///////////////////////////////////
 // / RUST MACROS
@@ -69,7 +66,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 extern "C" fn abort() -> ! {
 	loop {
 		unsafe {
-			llvm_asm!("wfi"::::"volatile");
+			asm!("wfi");
 		}
 	}
 }

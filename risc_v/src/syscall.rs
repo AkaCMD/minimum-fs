@@ -5,6 +5,7 @@
 
 use crate::{block, vfs, fd, process, page, cpu, cpu::Registers};
 use alloc::string::String;
+use core::arch::asm;
 
 /// user_syscall is called from trap.rs to invoke a system call. This
 /// is now separate from M and S modes.
