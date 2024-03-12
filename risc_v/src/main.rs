@@ -104,6 +104,7 @@ extern "C" fn kinit() {
     // Set up virtio. This requires a working heap and page-grained allocator.
     virtio::probe();
     console::init();
+    test::test();
     // We schedule the next context switch using a multiplier of 1
     // Block testing code removed.
     trap::schedule_next_context_switch(1);
@@ -138,6 +139,7 @@ pub mod process;
 pub mod rng;
 pub mod sched;
 pub mod syscall;
+pub mod test;
 pub mod trap;
 pub mod uart;
 pub mod vfs;
