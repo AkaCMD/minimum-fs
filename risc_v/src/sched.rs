@@ -1,7 +1,5 @@
 // sched.rs
 // Simple process scheduler
-// Stephen Marz
-// 27 Dec 2019
 
 use crate::cpu::get_mtime;
 use crate::process::{ProcessState, PROCESS_LIST, PROCESS_LIST_MUTEX};

@@ -1,6 +1,5 @@
 // input.rs
 // Input handling.
-// Stephen Marz
 
 use crate::kmem::kmalloc;
 use crate::page::{zalloc, PAGE_SIZE};

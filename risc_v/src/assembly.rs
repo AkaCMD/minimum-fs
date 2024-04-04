@@ -1,7 +1,5 @@
 // assembly.rs
 // Assembly imports module
-// Stephen Marz
-// 20 April 2020
 
 use core::arch::global_asm;
 

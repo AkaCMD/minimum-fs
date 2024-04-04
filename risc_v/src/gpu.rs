@@ -1,7 +1,5 @@
 // gpu.rs
 // Graphics stuff
-// Stephen Marz
-// 12 May 2020
 
 #![allow(dead_code)]
 use crate::{

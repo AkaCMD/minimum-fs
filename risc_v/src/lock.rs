@@ -1,7 +1,5 @@
 // lock.rs
 // Locking routines
-// Stephen Marz
-// 26 Apr 2020
 
 use core::{
     arch::asm,

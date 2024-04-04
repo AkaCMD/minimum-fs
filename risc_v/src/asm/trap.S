@@ -1,8 +1,5 @@
 # trap.S
 # Trap handler and global context
-# Steve Operating System
-# Stephen Marz
-# 24 February 2019
 .option norvc
 .altmacro
 .set NUM_GP_REGS, 32  # Number of registers per context

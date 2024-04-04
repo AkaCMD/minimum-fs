@@ -1,7 +1,5 @@
 // minixfs.rs
 // Minix 3 Filesystem Implementation
-// Stephen Marz
-// 16 March 2020
 
 use crate::{
     cpu::Registers,
@@ -188,6 +186,65 @@ impl MinixFileSystem {
                 bdev
             );
         }
+    }
+
+    /// Create a new file with content
+    pub fn create(bdev: usize, name: &str, mode: u16, content: &[u8]) -> Result<(), FsError> {
+        // Check if the file already exists
+        if MinixFileSystem::open(bdev, name).is_ok() {
+            return Err(FsError::FileExists);
+        }
+
+        // Find a free inode
+        let inode_num = Self::find_free_inode(bdev).unwrap();
+
+        // Initialize a new inode
+        let new_inode = Inode {
+            mode: mode | S_IFREG,
+            nlinks: 1,
+            uid: 0, // Set appropriate UID
+            gid: 0, // Set appropriate GID
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
+            zones: [0; 10],
+        };
+        // TODO: finish it
+        unimplemented!();
+        Ok(())
+    }
+
+    /// Find a free inode in the filesystem
+    pub fn find_free_inode(dev: usize) -> Option<u32> {
+        // Read the superblock to get information about the filesystem
+        let mut buffer = Buffer::new(1024);
+        let super_block = unsafe { &mut *(buffer.get_mut() as *mut SuperBlock) };
+        syc_read(dev, buffer.get_mut(), 1024, 1024);
+
+        // Calculate the number of blocks used for inode map
+        let imap_blocks = super_block.imap_blocks as usize;
+
+        // Iterate through each inode map block
+        for i in 0..imap_blocks {
+            let inode_map_offset = (2 + i) * BLOCK_SIZE as usize;
+            syc_read(dev, buffer.get_mut(), BLOCK_SIZE, inode_map_offset as u32);
+
+            // Iterate through each byte in the inode map block
+            for i in 0..buffer.len() {
+                let byte = buffer[i];
+                // Check each bit in the byte to find a free inode
+                for j in 0..8 {
+                    if byte & (1 << j) == 0 {
+                        // Calculate the inode number based on the current byte and bit position
+                        let inode_num = (i * BLOCK_SIZE as usize + j) as u32;
+                        return Some(inode_num);
+                    }
+                }
+            }
+        }
+
+        None // No free inode found
     }
 
     /// The goal of open is to traverse the path given by path. If we cache the inodes
@@ -462,10 +519,6 @@ impl MinixFileSystem {
         bytes_read
     }
 
-    pub fn write(&mut self, _desc: &Inode, _buffer: *const u8, _offset: u32, _size: u32) -> u32 {
-        0
-    }
-
     pub fn stat(&self, inode: &Inode) -> Stat {
         Stat {
             mode: inode.mode,
@@ -552,10 +605,12 @@ pub struct Stat {
     pub gid: u16,
 }
 
+#[derive(Debug)]
 pub enum FsError {
     Success,
     FileNotFound,
     Permission,
     IsFile,
     IsDirectory,
+    FileExists,
 }

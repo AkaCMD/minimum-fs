@@ -1,8 +1,6 @@
 // elf.rs
 // Routines for reading and parsing ELF
 // (Executable and Linkable Format) files.
-// 26-April-2020
-// Stephen Marz
 
 use crate::{
     buffer::Buffer,

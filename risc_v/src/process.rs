@@ -1,7 +1,5 @@
 // process.rs
 // Kernel and user processes
-// Stephen Marz
-// 27 Nov 2019
 
 use crate::lock::Mutex;
 use crate::{

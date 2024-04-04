@@ -1,7 +1,5 @@
 // syscall.rs
 // System calls
-// Stephen Marz
-// 3 Jan 2020
 
 use crate::console::{push_queue, IN_BUFFER, IN_LOCK};
 use crate::{

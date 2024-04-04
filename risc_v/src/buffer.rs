@@ -1,7 +1,6 @@
 // buffer.rs
 // BlockBuffer is so useful, we put it here instead
 // of in the file system.
-// Stephen Marz
 
 use crate::{
     cpu::memcpy,

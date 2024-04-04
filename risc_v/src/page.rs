@@ -1,7 +1,5 @@
 // page.rs
 // Memory routines
-// Stephen Marz
-// 6 October 2019
 
 use core::{mem::size_of, ptr::null_mut};
 

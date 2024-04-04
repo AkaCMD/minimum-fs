@@ -1,7 +1,5 @@
 // block.rs
 // Block device using VirtIO protocol
-// Stephen Marz
-// 10 March 2020
 
 use crate::{
     kmem::{kfree, kmalloc},

@@ -1,8 +1,6 @@
 // cpu.rs
 // CPU and CPU-related routines
 // Also contains the kernel's trap frame
-// Stephen Marz
-// 14 October 2019
 
 use core::arch::asm;
 

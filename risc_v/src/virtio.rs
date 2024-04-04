@@ -1,7 +1,5 @@
 // virtio.rs
 // VirtIO routines for the VirtIO protocol
-// Stephen Marz
-// 10 March 2020
 
 use crate::rng::setup_entropy_device;
 use crate::{block, block::setup_block_device, page::PAGE_SIZE};

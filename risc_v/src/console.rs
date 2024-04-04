@@ -1,7 +1,5 @@
 // console.rs
 // Console utilities for buffering
-// Stephen Marz
-// 4 June 2020
 
 use crate::lock::Mutex;
 use crate::process::{get_by_pid, set_running};
