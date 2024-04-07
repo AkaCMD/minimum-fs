@@ -189,7 +189,7 @@ pub fn add_kernel_process(func: fn()) -> u16 {
                                 // we start getting into multi-hart processing. For now, we want
                                 // a process. Get it to work, then improve it!
     let my_pid = unsafe { NEXT_PID };
-    let mut ret_proc = Process {
+    let ret_proc = Process {
         frame: zalloc(1) as *mut TrapFrame,
         stack: zalloc(STACK_PAGES),
         pid: my_pid,
@@ -278,7 +278,7 @@ pub fn add_kernel_process_args(func: fn(args_ptr: usize), args: usize) -> u16 {
                                     // we start getting into multi-hart processing. For now, we want
                                     // a process. Get it to work, then improve it!
         let my_pid = unsafe { NEXT_PID };
-        let mut ret_proc = Process {
+        let ret_proc = Process {
             frame: zalloc(1) as *mut TrapFrame,
             stack: zalloc(STACK_PAGES),
             pid: my_pid,

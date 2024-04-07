@@ -1,7 +1,5 @@
 // syscall.rs
 // System calls
-
-use crate::console::{push_queue, IN_BUFFER, IN_LOCK};
 use crate::{
     block::block_op,
     buffer::Buffer,
@@ -212,7 +210,7 @@ pub unsafe fn do_syscall(mepc: usize, frame: *mut TrapFrame) {
                     let descriptor = descriptor.unwrap();
                     match descriptor {
                         Descriptor::Framebuffer => {}
-                        Descriptor::File(inode) => {}
+                        Descriptor::File(_inode) => {}
                         _ => {
                             // unsupported
                             (*frame).regs[gp(Registers::A0)] = 0;
@@ -241,6 +239,19 @@ pub unsafe fn do_syscall(mepc: usize, frame: *mut TrapFrame) {
                 (*frame).regs[Registers::A2 as usize] as u32,
                 (*frame).regs[Registers::A3 as usize] as u64,
                 false,
+                (*frame).pid as u16,
+            );
+        }
+        181 => {
+            // Block write
+            println!("it's 181 syscall, write to block!");
+            set_waiting((*frame).pid as u16);
+            let _ = block_op(
+                (*frame).regs[Registers::A0 as usize],
+                (*frame).regs[Registers::A1 as usize] as *mut u8,
+                (*frame).regs[Registers::A2 as usize] as u32,
+                (*frame).regs[Registers::A3 as usize] as u64,
+                true,
                 (*frame).pid as u16,
             );
         }
@@ -491,6 +502,18 @@ pub fn syscall_sleep(duration: usize) {
 
 pub fn syscall_get_pid() -> u16 {
     do_make_syscall(172, 0, 0, 0, 0, 0, 0) as u16
+}
+
+pub fn syscall_block_write(dev: usize, buffer: *mut u8, size: u32, offset: u32) -> usize {
+    do_make_syscall(
+        181,
+        dev,
+        buffer as usize,
+        size as usize,
+        offset as usize,
+        0,
+        0,
+    )
 }
 
 /// This is a helper function ran as a process in kernel space

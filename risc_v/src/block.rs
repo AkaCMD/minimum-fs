@@ -128,6 +128,7 @@ pub const VIRTIO_BLK_F_DISCARD: u32 = 13;
 pub const VIRTIO_BLK_F_WRITE_ZEROES: u32 = 14;
 
 // We might get several types of errors, but they can be enumerated here.
+#[derive(Debug)]
 pub enum BlockErrors {
     Success = 0,
     BlockDeviceNotFound,

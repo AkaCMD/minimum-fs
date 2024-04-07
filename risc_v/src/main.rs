@@ -141,5 +141,4 @@ pub mod syscall;
 pub mod test;
 pub mod trap;
 pub mod uart;
-pub mod vfs;
 pub mod virtio;

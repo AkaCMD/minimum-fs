@@ -189,7 +189,7 @@ impl MinixFileSystem {
     }
 
     /// Create a new file with content
-    pub fn create(bdev: usize, name: &str, mode: u16, content: &[u8]) -> Result<(), FsError> {
+    pub fn create(bdev: usize, name: &str, mode: u16, _content: &[u8]) -> Result<(), FsError> {
         // Check if the file already exists
         if MinixFileSystem::open(bdev, name).is_ok() {
             return Err(FsError::FileExists);
@@ -212,7 +212,6 @@ impl MinixFileSystem {
         };
         // TODO: finish it
         unimplemented!();
-        Ok(())
     }
 
     /// Find a free inode in the filesystem

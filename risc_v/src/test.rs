@@ -1,8 +1,10 @@
+use alloc::string::String;
+
 use crate::block;
 // test.rs
-use crate::fs::{Inode, MinixFileSystem};
+use crate::fs::MinixFileSystem;
 use crate::kmem::{self, kfree, kmalloc};
-use crate::syscall::{syscall_exit, syscall_fs_read};
+use crate::syscall::*;
 /// Test block will load raw binaries into memory to execute them. This function
 /// will load ELF files and try to execute them.
 pub fn test() {
@@ -12,6 +14,7 @@ pub fn test() {
     test_read_proc();
     test_open_proc();
     test_find_free_inode();
+    test_write_blcok();
     // 	let path = "/shell\0".as_bytes().as_ptr();
     // 	syscall::syscall_execv(path,0);
     // 	println!("I should never get here, execv should destroy our process.");
@@ -49,11 +52,10 @@ fn test_find_free_inode() {
 }
 
 fn test_block_driver() {
-    // Let's test the block driver!
     println!();
     println!("Testing block driver.");
     let buffer = kmem::kmalloc(512);
-    block::read(8, buffer, 512, 0x400);
+    let _ = block::read(8, buffer, 512, 0x400);
     for i in 0..48 {
         print!(" {:02x}", unsafe { buffer.add(i).read() });
         if 0 == ((i + 1) % 24) {
@@ -64,7 +66,7 @@ fn test_block_driver() {
     println!("Block driver done");
 }
 
-// open(read) file by its name
+// Open(read) file by its name
 fn test_open_proc() {
     let buffer = kmalloc(100);
     MinixFileSystem::read(
@@ -82,4 +84,36 @@ fn test_open_proc() {
     println!();
     kfree(buffer);
     //syscall_exit();
+}
+
+// Writing to block and read back 
+fn test_write_blcok() {
+    println!();
+    println!("Write to block");
+    let test_string = String::from("Hello, block!");
+    let mut bytes = test_string.into_bytes();
+    let len = bytes.len() as u32;
+    let buffer = bytes.as_mut_ptr();
+    // The minimum size of writing is 512 bytes
+    match block::write(8, buffer, 512, 0xadc00) {
+        Ok(result) => {
+            println!("Write successful! Result: {}", result);
+        }
+        Err(error) => {
+            println!("Error occurred: {:?}", error);
+        }
+    }
+    kmem::kfree(buffer);
+    println!("wirte size: {} bytes", len);
+    println!("now read: ");
+    let read_buffer = kmalloc(512);
+    let _ = block::read(8, read_buffer, 512, 0xadc00);
+    for i in 0..len {
+        print!("{}", unsafe { read_buffer.add(i as usize).read() as char});
+        if 0 == ((i + 1) % 24) {
+            println!();
+        }
+    }
+    kfree(read_buffer);
+    println!("\nWirte to block driver done!");
 }

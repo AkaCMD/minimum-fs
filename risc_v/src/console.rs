@@ -2,7 +2,7 @@
 // Console utilities for buffering
 
 use crate::lock::Mutex;
-use crate::process::{get_by_pid, set_running};
+use crate::process::set_running;
 use alloc::collections::VecDeque;
 
 pub static mut IN_BUFFER: Option<VecDeque<u8>> = None;
