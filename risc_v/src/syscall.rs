@@ -212,12 +212,34 @@ pub unsafe fn do_syscall(mepc: usize, frame: *mut TrapFrame) {
                         Descriptor::Framebuffer => {}
                         Descriptor::File(_inode) => {}
                         _ => {
-                            // unsupported
                             (*frame).regs[gp(Registers::A0)] = 0;
                         }
                     }
                 }
             }
+        }
+        65 => {
+            println!("\nCALL WRITE FILE!");
+            // Translate virtual address to physical address
+            let mut physical_buffer = (*frame).regs[Registers::A2 as usize];
+            if (*frame).satp >> 60 != 0 {
+                let p = get_by_pid((*frame).pid as u16);
+                let table = ((*p).mmu_table).as_ref().unwrap();
+                let paddr = virt_to_phys(table, (*frame).regs[12]);
+                if paddr.is_none() {
+                    (*frame).regs[Registers::A0 as usize] = -1isize as usize;
+                    return;
+                }
+                physical_buffer = paddr.unwrap();
+            }
+            let _ = fs::process_write(
+                (*frame).pid as u16,
+                (*frame).regs[Registers::A0 as usize] as usize,
+                (*frame).regs[Registers::A1 as usize] as u32,
+                physical_buffer as *mut u8,
+                (*frame).regs[Registers::A3 as usize] as u32,
+                (*frame).regs[Registers::A4 as usize] as u32,
+            );
         }
         66 => {
             (*frame).regs[gp(Registers::A0)] = -1isize as usize;
@@ -504,7 +526,19 @@ pub fn syscall_get_pid() -> u16 {
     do_make_syscall(172, 0, 0, 0, 0, 0, 0) as u16
 }
 
-pub fn syscall_block_write(dev: usize, buffer: *mut u8, size: u32, offset: u32) -> usize {
+pub fn syscall_fs_write(dev: usize, inode: u32, buffer: *mut u8, size: u32, offset: u32) -> usize {
+    do_make_syscall(
+        65,
+        dev,
+        inode as usize,
+        buffer as usize,
+        size as usize,
+        offset as usize,
+        0,
+    )
+}
+
+pub fn syscall_block_write(dev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
     do_make_syscall(
         181,
         dev,
@@ -513,7 +547,7 @@ pub fn syscall_block_write(dev: usize, buffer: *mut u8, size: u32, offset: u32) 
         offset as usize,
         0,
         0,
-    )
+    ) as u8
 }
 
 /// This is a helper function ran as a process in kernel space

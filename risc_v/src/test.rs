@@ -11,10 +11,11 @@ pub fn test() {
     // The majority of the testing code needs to move into a system call (execv maybe?)
     MinixFileSystem::init(8);
     test_block_driver();
-    test_read_proc();
-    test_open_proc();
+    test_read_file();
+    test_open_file();
     test_find_free_inode();
-    test_write_blcok();
+    test_write_block();
+    test_write_file();
     // 	let path = "/shell\0".as_bytes().as_ptr();
     // 	syscall::syscall_execv(path,0);
     // 	println!("I should never get here, execv should destroy our process.");
@@ -23,7 +24,7 @@ pub fn test() {
 // sudo losetup /dev/loop24 hdd.dsk
 // sudo mount /dev/loop24 /mnt
 // ls /mnt
-fn test_read_proc() {
+fn test_read_file() {
     println!();
     println!("inode #4: ");
     let buffer = kmalloc(100);
@@ -67,18 +68,15 @@ fn test_block_driver() {
 }
 
 // Open(read) file by its name
-fn test_open_proc() {
+fn test_open_file() {
     let buffer = kmalloc(100);
-    MinixFileSystem::read(
-        8,
-        &MinixFileSystem::open(8, "/hello.txt").unwrap(),
-        buffer,
-        100,
-        0,
-    );
+    let file_path = "/hello.txt";
+    let inode = &MinixFileSystem::open(8, file_path).unwrap();
+    let size = inode.size;
+    MinixFileSystem::read(8, inode, buffer, 100, 0);
     println!();
-    println!("/hello.txt");
-    for i in 0..8 {
+    println!("{}", file_path);
+    for i in 0..(size - 1) as usize {
         print!("{}", unsafe { buffer.add(i).read() as char });
     }
     println!();
@@ -86,8 +84,8 @@ fn test_open_proc() {
     //syscall_exit();
 }
 
-// Writing to block and read back 
-fn test_write_blcok() {
+// Writing to block and read back
+fn test_write_block() {
     println!();
     println!("Write to block");
     let test_string = String::from("Hello, block!");
@@ -109,7 +107,7 @@ fn test_write_blcok() {
     let read_buffer = kmalloc(512);
     let _ = block::read(8, read_buffer, 512, 0xadc00);
     for i in 0..len {
-        print!("{}", unsafe { read_buffer.add(i as usize).read() as char});
+        print!("{}", unsafe { read_buffer.add(i as usize).read() as char });
         if 0 == ((i + 1) % 24) {
             println!();
         }
@@ -117,3 +115,18 @@ fn test_write_blcok() {
     kfree(read_buffer);
     println!("\nWirte to block driver done!");
 }
+
+fn test_write_file() {
+    println!();
+    println!("inode #5: ");
+    let test_string = String::from("something");
+    let mut bytes = test_string.into_bytes();
+    let len = bytes.len();
+    let buffer = bytes.as_mut_ptr();
+
+    let bytes_write = syscall_fs_write(8, 5, buffer, len as u32, 0);
+    println!("write bytes: {}", bytes_write);
+    kfree(buffer);
+}
+
+fn show_fs_info() {}

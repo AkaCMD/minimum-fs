@@ -4,7 +4,7 @@
 use crate::{
     cpu::Registers,
     process::{add_kernel_process_args, get_by_pid, set_running, set_waiting},
-    syscall::syscall_block_read,
+    syscall::{syscall_block_read, syscall_block_write},
 };
 
 use crate::{buffer::Buffer, cpu::memcpy};
@@ -518,6 +518,65 @@ impl MinixFileSystem {
         bytes_read
     }
 
+    // TODO: Change the info of file after write
+    pub fn write(bdev: usize, inode: &Inode, buffer: *mut u8, size: u32, offset: u32) -> u32 {
+        let mut blocks_seen = 0u32;
+        let offset_block = offset / BLOCK_SIZE;
+        let mut offset_byte = offset % BLOCK_SIZE;
+
+        let mut bytes_left = if size > inode.size { inode.size } else { size };
+        let mut bytes_write = 0u32;
+
+        let mut block_buffer = Buffer::new(BLOCK_SIZE as usize);
+
+        let mut indirect_buffer = Buffer::new(BLOCK_SIZE as usize);
+        let mut iindirect_buffer = Buffer::new(BLOCK_SIZE as usize);
+        let mut iiindirect_buffer = Buffer::new(BLOCK_SIZE as usize);
+
+        let izones = indirect_buffer.get() as *const u32;
+        let iizones = iiindirect_buffer.get() as *const u32;
+        let iiizones = iiindirect_buffer.get() as *const u32;
+
+        // Direct zones
+        for i in 0..7 {
+            if inode.zones[i] == 0 {
+                continue;
+            }
+            if offset_block <= blocks_seen {
+                let zone_offset = inode.zones[i] * BLOCK_SIZE;
+                syc_write(bdev, buffer, BLOCK_SIZE, zone_offset);
+
+                let write_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
+                    bytes_left
+                } else {
+                    BLOCK_SIZE - offset_byte
+                };
+                unsafe {
+                    buffer.add(bytes_write as usize);
+                }
+                offset_byte = 0;
+                bytes_write += write_this_many;
+                bytes_left -= write_this_many;
+                if bytes_left == 0 {
+                    return bytes_write;
+                }
+            }
+            blocks_seen += 1;
+        }
+
+        // Singly indirect zones
+        // if inode.zones[7] != 0 {
+        //     syc_write(
+        //         bdev,
+        //         buffer,
+        //         BLOCK_SIZE,
+        //         BLOCK_SIZE * inode.zones[7],
+        //     );
+        // }
+        // TODO:
+        bytes_write
+    }
+
     pub fn stat(&self, inode: &Inode) -> Stat {
         Stat {
             mode: inode.mode,
@@ -533,6 +592,10 @@ impl MinixFileSystem {
 /// wanted to do are no longer there, so this is a worthless function.
 fn syc_read(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
     syscall_block_read(bdev, buffer, size, offset)
+}
+
+fn syc_write(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
+    syscall_block_write(bdev, buffer, size, offset)
 }
 
 // We have to start a process when reading from a file since the block
@@ -591,6 +654,45 @@ pub fn process_read(pid: u16, dev: usize, node: u32, buffer: *mut u8, size: u32,
     let boxed_args = Box::new(args);
     set_waiting(pid);
     let _ = add_kernel_process_args(read_proc, Box::into_raw(boxed_args) as usize);
+}
+
+// This is the actual code ran inside of the write process
+fn write_proc(args_addr: usize) {
+    let args = unsafe { Box::from_raw(args_addr as *mut ProcArgs) };
+
+    let inode = MinixFileSystem::get_inode(args.dev, args.node);
+    let bytes = MinixFileSystem::write(
+        args.dev,
+        &inode.unwrap(),
+        args.buffer,
+        args.size,
+        args.offset,
+    );
+
+    // write the return result into regs[10], which is A0
+    unsafe {
+        let ptr = get_by_pid(args.pid);
+        if !ptr.is_null() {
+            (*(*ptr).frame).regs[Registers::A0 as usize] = bytes as usize;
+        }
+    }
+    set_running(args.pid);
+}
+
+/// System calls will call process_write, which will spawn off a kernel process to write
+/// the requested data.
+pub fn process_write(pid: u16, dev: usize, node: u32, buffer: *mut u8, size: u32, offset: u32) {
+    let args = ProcArgs {
+        pid,
+        dev,
+        buffer,
+        size,
+        offset,
+        node,
+    };
+    let boxed_args = Box::new(args);
+    set_waiting(pid);
+    let _ = add_kernel_process_args(write_proc, Box::into_raw(boxed_args) as usize);
 }
 
 /// Stats on a file. This generally mimics an inode

@@ -1,8 +1,8 @@
 // lock.rs
 // Locking routines
 
-use core::arch::asm;
 use crate::syscall::syscall_sleep;
+use core::arch::asm;
 
 pub const DEFAULT_LOCK_SLEEP: usize = 10000;
 #[repr(u32)]
