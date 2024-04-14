@@ -641,6 +641,30 @@ impl MinixFileSystem {
         // zone_num: inode.zones[i]
         zone_num * BLOCK_SIZE as usize
     }
+    pub fn show_fs_info(bdev: usize) {
+        let mut buffer = Buffer::new(1024);
+        let super_block = unsafe { &*(buffer.get_mut() as *mut SuperBlock) };
+        // Read superblock
+        syc_read(bdev, buffer.get_mut(), 512, 1024);
+        if super_block.magic == MAGIC {
+            println!("\nFilesystem Superblock Info: ");
+            println!("{:#?}", super_block);
+
+            println!("\nNow list all existed files: ");
+            if let Some(cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
+                for (path, _) in cache.iter() {
+                    println!("{}", path);
+                }
+                unsafe {
+                    MFS_INODE_CACHE[bdev - 1].replace(cache);
+                }
+            }
+        }
+    }
+
+    pub fn show_file_tree() {
+        // TODO: Implement this
+    }
 }
 
 /// This is a wrapper function around the syscall_block_read. This allows me to do
@@ -750,28 +774,6 @@ pub fn process_write(pid: u16, dev: usize, node: u32, buffer: *mut u8, size: u32
     let boxed_args = Box::new(args);
     set_waiting(pid);
     let _ = add_kernel_process_args(write_proc, Box::into_raw(boxed_args) as usize);
-}
-
-// TODO: fix the file not found issue caused by this
-pub fn show_fs_info(bdev: usize) {
-    let mut buffer = Buffer::new(1024);
-    let super_block = unsafe { &*(buffer.get_mut() as *mut SuperBlock) };
-    // Read superblock
-    syc_read(bdev, buffer.get_mut(), 512, 1024);
-    if super_block.magic == MAGIC {
-        println!("\nFilesystem Superblock Info: ");
-        println!("{:#?}", super_block);
-
-        println!("Now list all existed files: ");
-        if let Some(cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
-            for (path, _) in cache.iter() {
-                println!("{}", path);
-            }
-            unsafe {
-                MFS_INODE_CACHE[bdev - 1].replace(cache);
-            }
-        }
-    }
 }
 
 fn inverse_nth_bit(nth: u32) {

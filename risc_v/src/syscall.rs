@@ -266,7 +266,6 @@ pub unsafe fn do_syscall(mepc: usize, frame: *mut TrapFrame) {
         }
         181 => {
             // Block write
-            println!("it's 181 syscall, write to block!");
             set_waiting((*frame).pid as u16);
             let _ = block_op(
                 (*frame).regs[Registers::A0 as usize],

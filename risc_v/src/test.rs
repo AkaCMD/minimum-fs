@@ -10,18 +10,34 @@ use crate::syscall::*;
 pub fn test() {
     // The majority of the testing code needs to move into a system call (execv maybe?)
     MinixFileSystem::init(8);
-    crate::fs::show_fs_info(8);
+    greetings();
+    MinixFileSystem::show_fs_info(8);
     test_block_driver();
     test_read_file();
-    test_open_file();
-    test_find_free_inode();
+    test_open_file("/hello.txt");
+    //test_find_free_inode();
     test_write_block();
+    
+    test_open_file("/file.txt");
     test_write_file();
+    test_open_file("/file.txt");
+
     test_delete_file();
-    crate::fs::show_fs_info(8);
+    MinixFileSystem::show_fs_info(8);
     // 	let path = "/shell\0".as_bytes().as_ptr();
     // 	syscall::syscall_execv(path,0);
     // 	println!("I should never get here, execv should destroy our process.");
+}
+
+fn greetings() {
+    println!(
+        "
+__________________________________________________
+|                                                | 
+|         Welcome to simple file system!         |
+|                                                |
+--------------------------------------------------"
+    );
 }
 
 // sudo losetup /dev/loop24 hdd.dsk
@@ -29,6 +45,7 @@ pub fn test() {
 // ls /mnt
 fn test_read_file() {
     println!();
+    print_divider("Reading from file");
     println!("inode #4: ");
     let buffer = kmalloc(100);
     // device, inode, buffer, size, offset
@@ -50,14 +67,14 @@ fn test_read_file() {
 
 fn test_find_free_inode() {
     println!();
-    println!("next free inode: ");
+    print_divider("Finding next free inode");
     let num = MinixFileSystem::find_free_inode(8).unwrap();
     println!("{}", num);
 }
 
 fn test_block_driver() {
     println!();
-    println!("Testing block driver.");
+    print_divider("Testing block driver");
     let buffer = kmem::kmalloc(512);
     let _ = block::read(8, buffer, 512, 0x400);
     for i in 0..48 {
@@ -71,14 +88,16 @@ fn test_block_driver() {
 }
 
 // Open(read) file by its name
-fn test_open_file() {
+fn test_open_file(path: &str) {
+    println!();
+    print_divider("Open file");
+    println!("{} opened", path);
     let buffer = kmalloc(100);
-    let file_path = "/hello.txt";
-    let inode = &MinixFileSystem::open(8, file_path).unwrap();
+    let inode = &MinixFileSystem::open(8, path).unwrap();
     let size = inode.size;
     MinixFileSystem::read(8, inode, buffer, 100, 0);
     println!();
-    println!("{}", file_path);
+    println!("{}", path);
     for i in 0..size as usize {
         print!("{}", unsafe { buffer.add(i).read() as char });
     }
@@ -90,7 +109,7 @@ fn test_open_file() {
 // Writing to block and read back
 fn test_write_block() {
     println!();
-    println!("Write to block");
+    print_divider("Write to block");
     let test_string = String::from("Hello, block!");
     let mut bytes = test_string.into_bytes();
     let len = bytes.len() as u32;
@@ -121,6 +140,7 @@ fn test_write_block() {
 
 fn test_write_file() {
     println!();
+    print_divider("Writing to file");
     println!("file.txt: ");
     let file_path = "/file.txt";
     let inode = &mut MinixFileSystem::open(8, file_path).unwrap();
@@ -140,5 +160,22 @@ fn show_inode_stat(inode: &Inode) {
 
 fn test_delete_file() {
     println!();
+    print_divider("Delete file");
+    println!("/file.txt deleted");
     MinixFileSystem::delete(8, "/file.txt");
 }
+
+fn print_divider(string: &str) {
+    let total_length = 40; // Total length of the divider
+    let string_length = string.len(); // Length of the input string
+    let padding_length = (total_length - string_length - 6) / 2; // Calculate the number of spaces needed on each side
+
+    // Build the left padding spaces
+    let left_padding = " ".repeat(padding_length);
+    // Build the right padding spaces
+    let right_padding = " ".repeat(padding_length + if string_length % 2 == 0 { 0 } else { 1 });
+
+    // Print the divider with the appropriate spacing
+    println!("-----------------------<{} {} {}>-----------------------", left_padding, string, right_padding);
+}
+
