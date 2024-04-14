@@ -597,6 +597,14 @@ impl MinixFileSystem {
         }
 
         // 2. clear zones, change zone bitmap from 1 to 0
+        // for i in inode.zones {
+        //     if i !=0 {
+        //         let zmap_offset = Self::get_zmap_offset(i as usize);
+        //         let nth = i % 8;
+        //         let buffer = Buffer::new(1);
+        //         syc_write(bdev, buffer as *mut u8, 1, zmap_offset as u32);
+        //     }
+        // }
 
         // 3. clear inode, change inode bitmap from 1 to 0
 
@@ -759,8 +767,15 @@ pub fn show_fs_info(bdev: usize) {
             for (path, _) in cache.iter() {
                 println!("{}", path);
             }
+            unsafe {
+                MFS_INODE_CACHE[bdev - 1].replace(cache);
+            }
         }
     }
+}
+
+fn inverse_nth_bit(nth: u32) {
+    // TODO: implement this
 }
 
 /// Stats on a file. This generally mimics an inode

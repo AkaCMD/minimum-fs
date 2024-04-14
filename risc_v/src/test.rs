@@ -10,13 +10,15 @@ use crate::syscall::*;
 pub fn test() {
     // The majority of the testing code needs to move into a system call (execv maybe?)
     MinixFileSystem::init(8);
-    //crate::fs::show_fs_info(8);
+    crate::fs::show_fs_info(8);
     test_block_driver();
     test_read_file();
     test_open_file();
     test_find_free_inode();
     test_write_block();
     test_write_file();
+    test_delete_file();
+    crate::fs::show_fs_info(8);
     // 	let path = "/shell\0".as_bytes().as_ptr();
     // 	syscall::syscall_execv(path,0);
     // 	println!("I should never get here, execv should destroy our process.");
@@ -134,4 +136,9 @@ fn test_write_file() {
 
 fn show_inode_stat(inode: &Inode) {
     println!("{:?}", MinixFileSystem.stat(inode));
+}
+
+fn test_delete_file() {
+    println!();
+    MinixFileSystem::delete(8, "/file.txt");
 }
