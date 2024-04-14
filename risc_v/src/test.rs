@@ -2,7 +2,7 @@ use alloc::string::String;
 
 use crate::block;
 // test.rs
-use crate::fs::MinixFileSystem;
+use crate::fs::{Inode, MinixFileSystem};
 use crate::kmem::{self, kfree, kmalloc};
 use crate::syscall::*;
 /// Test block will load raw binaries into memory to execute them. This function
@@ -10,6 +10,7 @@ use crate::syscall::*;
 pub fn test() {
     // The majority of the testing code needs to move into a system call (execv maybe?)
     MinixFileSystem::init(8);
+    //crate::fs::show_fs_info(8);
     test_block_driver();
     test_read_file();
     test_open_file();
@@ -76,7 +77,7 @@ fn test_open_file() {
     MinixFileSystem::read(8, inode, buffer, 100, 0);
     println!();
     println!("{}", file_path);
-    for i in 0..(size - 1) as usize {
+    for i in 0..size as usize {
         print!("{}", unsafe { buffer.add(i).read() as char });
     }
     println!();
@@ -118,15 +119,19 @@ fn test_write_block() {
 
 fn test_write_file() {
     println!();
-    println!("inode #5: ");
+    println!("file.txt: ");
+    let file_path = "/file.txt";
+    let inode = &mut MinixFileSystem::open(8, file_path).unwrap();
     let test_string = String::from("something");
     let mut bytes = test_string.into_bytes();
     let len = bytes.len();
     let buffer = bytes.as_mut_ptr();
 
-    let bytes_write = syscall_fs_write(8, 5, buffer, len as u32, 0);
+    let bytes_write = &MinixFileSystem::write(8, inode, buffer, len as u32, 0);
     println!("write bytes: {}", bytes_write);
     kfree(buffer);
 }
 
-fn show_fs_info() {}
+fn show_inode_stat(inode: &Inode) {
+    println!("{:?}", MinixFileSystem.stat(inode));
+}

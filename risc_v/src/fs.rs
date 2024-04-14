@@ -3,13 +3,14 @@
 
 use crate::{
     cpu::Registers,
+    kmem::kfree,
     process::{add_kernel_process_args, get_by_pid, set_running, set_waiting},
     syscall::{syscall_block_read, syscall_block_write},
 };
 
 use crate::{buffer::Buffer, cpu::memcpy};
 use alloc::{boxed::Box, collections::BTreeMap, string::String};
-use core::mem::size_of;
+use core::{mem::size_of, str::Bytes};
 
 pub const MAGIC: u16 = 0x4d5a;
 pub const BLOCK_SIZE: u32 = 1024;
@@ -20,6 +21,7 @@ pub const S_IFREG: u16 = 0o100_000;
 /// us all the information we need to read the file system and navigate
 /// the file system, including where to find the inodes and zones (blocks).
 #[repr(C)]
+#[derive(Debug)]
 pub struct SuperBlock {
     pub ninodes: u32,
     pub pad0: u16,
@@ -189,7 +191,7 @@ impl MinixFileSystem {
     }
 
     /// Create a new file with content
-    pub fn create(bdev: usize, name: &str, mode: u16, _content: &[u8]) -> Result<(), FsError> {
+    pub fn create(bdev: usize, name: &str, mode: u16, size: u32) -> Result<(), FsError> {
         // Check if the file already exists
         if MinixFileSystem::open(bdev, name).is_ok() {
             return Err(FsError::FileExists);
@@ -204,7 +206,7 @@ impl MinixFileSystem {
             nlinks: 1,
             uid: 0, // Set appropriate UID
             gid: 0, // Set appropriate GID
-            size: 0,
+            size,
             atime: 0,
             mtime: 0,
             ctime: 0,
@@ -519,7 +521,7 @@ impl MinixFileSystem {
     }
 
     // TODO: Change the info of file after write
-    pub fn write(bdev: usize, inode: &Inode, buffer: *mut u8, size: u32, offset: u32) -> u32 {
+    pub fn write(bdev: usize, inode: &mut Inode, buffer: *mut u8, size: u32, offset: u32) -> u32 {
         let mut blocks_seen = 0u32;
         let offset_block = offset / BLOCK_SIZE;
         let mut offset_byte = offset % BLOCK_SIZE;
@@ -558,6 +560,8 @@ impl MinixFileSystem {
                 bytes_write += write_this_many;
                 bytes_left -= write_this_many;
                 if bytes_left == 0 {
+                    // Change inode size
+                    inode.size = bytes_write;
                     return bytes_write;
                 }
             }
@@ -574,7 +578,29 @@ impl MinixFileSystem {
         //     );
         // }
         // TODO:
+        // Change inode size
+        inode.size = bytes_write;
         bytes_write
+    }
+
+    pub fn delete(bdev: usize, path: &str) {
+        // TODO: Delete file and refresh cache
+        // 1. delete directory in BTree
+        let inode = Self::open(bdev, path).unwrap();
+        if let Some(mut cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
+            if let Some(_inode) = cache.get(path) {
+                cache.remove(path);
+            }
+            unsafe {
+                MFS_INODE_CACHE[bdev - 1].replace(cache);
+            }
+        }
+
+        // 2. clear zones, change zone bitmap from 1 to 0
+
+        // 3. clear inode, change inode bitmap from 1 to 0
+
+        //Self::write(bdev, &mut inode, buffer, inode.size, 0);
     }
 
     pub fn stat(&self, inode: &Inode) -> Stat {
@@ -584,6 +610,28 @@ impl MinixFileSystem {
             uid: inode.uid,
             gid: inode.gid,
         }
+    }
+
+    pub fn get_imap_offset(inode_num: usize) -> usize {
+        // then take the inode_num % 8 bit
+        2 * BLOCK_SIZE as usize + (inode_num - 1) / 8
+    }
+
+    pub fn get_zmap_offset(zone_num: usize) -> usize {
+        // inode.zones[i] * BLOCK_SIZE
+        // then take the zone_num % 8 bit
+        (2 + 2/* imap blocks */) * BLOCK_SIZE as usize + zone_num / 8
+    }
+
+    pub fn get_inode_offset(inode_num: usize) -> usize {
+        (2 + 2/* imap blocks */ + 4/* zmap blocks */) as usize * BLOCK_SIZE as usize
+            + ((inode_num as usize - 1) / (BLOCK_SIZE as usize / size_of::<Inode>()))
+                * BLOCK_SIZE as usize
+    }
+
+    pub fn get_zone_offset(zone_num: usize) -> usize {
+        // zone_num: inode.zones[i]
+        zone_num * BLOCK_SIZE as usize
     }
 }
 
@@ -663,7 +711,7 @@ fn write_proc(args_addr: usize) {
     let inode = MinixFileSystem::get_inode(args.dev, args.node);
     let bytes = MinixFileSystem::write(
         args.dev,
-        &inode.unwrap(),
+        &mut inode.unwrap(),
         args.buffer,
         args.size,
         args.offset,
@@ -690,15 +738,36 @@ pub fn process_write(pid: u16, dev: usize, node: u32, buffer: *mut u8, size: u32
         offset,
         node,
     };
+
     let boxed_args = Box::new(args);
     set_waiting(pid);
     let _ = add_kernel_process_args(write_proc, Box::into_raw(boxed_args) as usize);
+}
+
+// TODO: fix the file not found issue caused by this
+pub fn show_fs_info(bdev: usize) {
+    let mut buffer = Buffer::new(1024);
+    let super_block = unsafe { &*(buffer.get_mut() as *mut SuperBlock) };
+    // Read superblock
+    syc_read(bdev, buffer.get_mut(), 512, 1024);
+    if super_block.magic == MAGIC {
+        println!("\nFilesystem Superblock Info: ");
+        println!("{:#?}", super_block);
+
+        println!("Now list all existed files: ");
+        if let Some(cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
+            for (path, _) in cache.iter() {
+                println!("{}", path);
+            }
+        }
+    }
 }
 
 /// Stats on a file. This generally mimics an inode
 /// since that's the information we want anyway.
 /// However, inodes are filesystem specific, and we
 /// want a more generic stat.
+#[derive(Debug)]
 pub struct Stat {
     pub mode: u16,
     pub size: u32,
