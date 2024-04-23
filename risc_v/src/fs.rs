@@ -3,14 +3,13 @@
 
 use crate::{
     cpu::Registers,
-    kmem::kfree,
     process::{add_kernel_process_args, get_by_pid, set_running, set_waiting},
     syscall::{syscall_block_read, syscall_block_write},
 };
 
 use crate::{buffer::Buffer, cpu::memcpy};
 use alloc::{boxed::Box, collections::BTreeMap, string::String};
-use core::{mem::size_of, str::Bytes};
+use core::mem::size_of;
 
 pub const MAGIC: u16 = 0x4d5a;
 pub const BLOCK_SIZE: u32 = 1024;
@@ -529,8 +528,6 @@ impl MinixFileSystem {
         let mut bytes_left = if size > inode.size { inode.size } else { size };
         let mut bytes_write = 0u32;
 
-        let mut block_buffer = Buffer::new(BLOCK_SIZE as usize);
-
         let mut indirect_buffer = Buffer::new(BLOCK_SIZE as usize);
         let mut iindirect_buffer = Buffer::new(BLOCK_SIZE as usize);
         let mut iiindirect_buffer = Buffer::new(BLOCK_SIZE as usize);
@@ -539,7 +536,12 @@ impl MinixFileSystem {
         let iizones = iiindirect_buffer.get() as *const u32;
         let iiizones = iiindirect_buffer.get() as *const u32;
 
-        // Direct zones
+        // ////////////////////////////////////////////
+        // // DIRECT ZONES
+        // ////////////////////////////////////////////
+        // In Rust, our for loop automatically "declares" i from 0 to < 7. The syntax
+        // 0..7 means 0 through to 7 but not including 7. If we want to include 7, we
+        // would use the syntax 0..=7.
         for i in 0..7 {
             if inode.zones[i] == 0 {
                 continue;
@@ -554,31 +556,163 @@ impl MinixFileSystem {
                     BLOCK_SIZE - offset_byte
                 };
                 unsafe {
-                    buffer.add(bytes_write as usize);
-                }
+                    let _ = buffer.add(bytes_write as usize);
+                };
                 offset_byte = 0;
                 bytes_write += write_this_many;
                 bytes_left -= write_this_many;
                 if bytes_left == 0 {
-                    // Change inode size
-                    inode.size = bytes_write;
                     return bytes_write;
                 }
             }
             blocks_seen += 1;
         }
 
-        // Singly indirect zones
-        // if inode.zones[7] != 0 {
-        //     syc_write(
-        //         bdev,
-        //         buffer,
-        //         BLOCK_SIZE,
-        //         BLOCK_SIZE * inode.zones[7],
-        //     );
-        // }
-        // TODO:
-        // Change inode size
+        // ////////////////////////////////////////////
+        // // SINGLY INDIRECT ZONES
+        // ////////////////////////////////////////////
+        // Each indirect zone is a list of pointers, each 4 bytes. These then
+        // point to zones where the data can be found. Just like with the direct zones,
+        // we need to make sure the zone isn't 0. A zone of 0 means skip it.
+        if inode.zones[7] != 0 {
+            syc_read(
+                bdev,
+                indirect_buffer.get_mut(),
+                BLOCK_SIZE,
+                BLOCK_SIZE * inode.zones[7],
+            );
+            let izones = indirect_buffer.get() as *const u32;
+            for i in 0..NUM_IPTRS {
+                unsafe {
+                    if izones.add(i).read() != 0 {
+                        if offset_block <= blocks_seen {
+                            syc_write(bdev, buffer, BLOCK_SIZE, BLOCK_SIZE * izones.add(i).read());
+                            let write_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
+                                bytes_left
+                            } else {
+                                BLOCK_SIZE - offset_byte
+                            };
+                            let _ = buffer.add(bytes_write as usize);
+                            offset_byte = 0;
+                            bytes_write += write_this_many;
+                            bytes_left -= write_this_many;
+                            if bytes_left == 0 {
+                                return bytes_write;
+                            }
+                        }
+                        blocks_seen += 1;
+                    }
+                }
+            }
+        }
+        // ////////////////////////////////////////////
+        // // DOUBLY INDIRECT ZONES
+        // ////////////////////////////////////////////
+        if inode.zones[8] != 0 {
+            syc_read(
+                bdev,
+                indirect_buffer.get_mut(),
+                BLOCK_SIZE,
+                BLOCK_SIZE * inode.zones[8],
+            );
+            unsafe {
+                for i in 0..NUM_IPTRS {
+                    if izones.add(i).read() != 0 {
+                        syc_read(
+                            bdev,
+                            iindirect_buffer.get_mut(),
+                            BLOCK_SIZE,
+                            BLOCK_SIZE * izones.add(i).read(),
+                        );
+                        for j in 0..NUM_IPTRS {
+                            if iizones.add(j).read() != 0 {
+                                if offset_block <= blocks_seen {
+                                    syc_write(
+                                        bdev,
+                                        buffer,
+                                        BLOCK_SIZE,
+                                        BLOCK_SIZE * iizones.add(j).read(),
+                                    );
+                                    let write_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
+                                        bytes_left
+                                    } else {
+                                        BLOCK_SIZE - offset_byte
+                                    };
+                                    let _ = buffer.add(bytes_write as usize);
+                                    bytes_write += write_this_many;
+                                    bytes_left -= write_this_many;
+                                    offset_byte = 0;
+                                    if bytes_left == 0 {
+                                        return bytes_write;
+                                    }
+                                }
+                                blocks_seen += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // ////////////////////////////////////////////
+        // // TRIPLY INDIRECT ZONES
+        // ////////////////////////////////////////////
+        if inode.zones[9] != 0 {
+            syc_read(
+                bdev,
+                indirect_buffer.get_mut(),
+                BLOCK_SIZE,
+                BLOCK_SIZE * inode.zones[9],
+            );
+            unsafe {
+                for i in 0..NUM_IPTRS {
+                    if izones.add(i).read() != 0 {
+                        syc_read(
+                            bdev,
+                            iindirect_buffer.get_mut(),
+                            BLOCK_SIZE,
+                            BLOCK_SIZE * izones.add(i).read(),
+                        );
+                        for j in 0..NUM_IPTRS {
+                            if iizones.add(j).read() != 0 {
+                                syc_read(
+                                    bdev,
+                                    iiindirect_buffer.get_mut(),
+                                    BLOCK_SIZE,
+                                    BLOCK_SIZE * iizones.add(j).read(),
+                                );
+                                for k in 0..NUM_IPTRS {
+                                    if iiizones.add(k).read() != 0 {
+                                        if offset_block <= blocks_seen {
+                                            syc_write(
+                                                bdev,
+                                                buffer,
+                                                BLOCK_SIZE,
+                                                BLOCK_SIZE * iiizones.add(k).read(),
+                                            );
+                                            let write_this_many =
+                                                if BLOCK_SIZE - offset_byte > bytes_left {
+                                                    bytes_left
+                                                } else {
+                                                    BLOCK_SIZE - offset_byte
+                                                };
+                                            let _ = buffer.add(bytes_write as usize);
+                                            bytes_write += write_this_many;
+                                            bytes_left -= write_this_many;
+                                            offset_byte = 0;
+                                            if bytes_left == 0 {
+                                                return bytes_write;
+                                            }
+                                        }
+                                        blocks_seen += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // TODO: Change inode size
         inode.size = bytes_write;
         bytes_write
     }

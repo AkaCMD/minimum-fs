@@ -17,7 +17,7 @@ pub fn test() {
     test_open_file("/hello.txt");
     //test_find_free_inode();
     test_write_block();
-    
+
     test_open_file("/file.txt");
     test_write_file();
     test_open_file("/file.txt");
@@ -176,6 +176,8 @@ fn print_divider(string: &str) {
     let right_padding = " ".repeat(padding_length + if string_length % 2 == 0 { 0 } else { 1 });
 
     // Print the divider with the appropriate spacing
-    println!("-----------------------<{} {} {}>-----------------------", left_padding, string, right_padding);
+    println!(
+        "-----------------------<{} {} {}>-----------------------",
+        left_padding, string, right_padding
+    );
 }
-
