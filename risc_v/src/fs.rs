@@ -188,7 +188,6 @@ impl MinixFileSystem {
             );
         }
     }
-    
 
     /// Create a new file with content
     pub fn create(bdev: usize, name: &str, mode: u16, size: u32) -> Result<(), FsError> {
@@ -730,7 +729,7 @@ impl MinixFileSystem {
                 MFS_INODE_CACHE[bdev - 1].replace(cache);
             }
         }
-        /* 
+        /*
         // 2. clear zones, change zone bitmap from 1 to 0
         for i in inode.zones {
             if i !=0 {
@@ -758,7 +757,7 @@ impl MinixFileSystem {
 
         // clear buffer
         let mut buffer = Buffer::new(1);
-    
+
         // 4. clear inode area
         //Self::write(bdev, &mut inode, buffer, inode.size, 0);
         */

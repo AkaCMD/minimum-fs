@@ -1,5 +1,3 @@
-use core::slice;
-
 use alloc::string::String;
 
 use crate::block;
@@ -12,15 +10,26 @@ use crate::syscall::*;
 pub fn test() {
     // The majority of the testing code needs to move into a system call (execv maybe?)
     MinixFileSystem::init(8);
+
     greetings();
+
     MinixFileSystem::show_fs_info(8);
+
     test_block_driver();
-    //test_read_file();
+    test_read_file_with_inode(2);
     test_open_file("/hello.txt");
     test_find_free_inode();
     //test_write_block();
 
-    test_delete_file();
+    // before write: print file.txt content
+    test_open_file("/file.txt");
+
+    test_write_file("/file.txt", "cmd here");
+
+    // after write: print file.txt content
+    test_open_file("/file.txt");
+
+    test_delete_file("/file.txt");
     MinixFileSystem::show_fs_info(8);
     // 	let path = "/shell\0".as_bytes().as_ptr();
     // 	syscall::syscall_execv(path,0);
@@ -41,26 +50,25 @@ __________________________________________________
 // sudo losetup /dev/loop24 hdd.dsk
 // sudo mount /dev/loop24 /mnt
 // ls /mnt
-fn test_read_file() {
+fn test_read_file_with_inode(inode_num: u32) {
     println!();
     print_divider("Reading from file");
-    println!("inode #2: ");
+    println!("inode #{}: ", inode_num);
     let buffer = kmalloc(200);
     // device, inode, buffer, size, offset
-    let bytes_read = syscall_fs_read(8, 2, buffer, 200, 0);
-    if bytes_read != 13 {
+    let bytes_read = syscall_fs_read(8, inode_num, buffer, 200, 0);
+    if bytes_read != 33 {
         println!(
             "Read {} bytes, but I thought the file was 11 bytes.",
             bytes_read
         );
     } else {
-        for i in 0..13 {
+        for i in 0..33 {
             print!("{}", unsafe { buffer.add(i).read() as char });
         }
         println!();
     }
     kfree(buffer);
-    //syscall_exit();
 }
 
 fn test_find_free_inode() {
@@ -99,11 +107,10 @@ fn test_open_file(path: &str) {
     println!("file size: {}", size);
     println!("read size: {}", read_size);
     for i in 0..read_size as usize {
-        print!("{}", unsafe { buffer.add(i).read() as char});
+        print!("{}", unsafe { buffer.add(i).read() as char });
     }
     println!();
     kfree(buffer);
-    //syscall_exit();
 }
 
 // Writing to block and read back
@@ -124,7 +131,7 @@ fn test_write_block() {
         }
     }
     kmem::kfree(buffer);
-    println!("wirte size: {} bytes", len);
+    println!("write size: {} bytes", len);
     println!("now read: ");
     let read_buffer = kmalloc(512);
     let _ = block::read(8, read_buffer, 512, 0xadc00);
@@ -135,22 +142,23 @@ fn test_write_block() {
         }
     }
     kfree(read_buffer);
-    println!("\nWirte to block driver done!");
+    println!("\nWrite to block driver done!");
 }
 
-fn test_write_file() {
+fn test_write_file(file_path: &str, content: &str) {
     println!();
     print_divider("Writing to file");
-    println!("file.txt: ");
-    let file_path = "/file.txt";
+    println!("{}:", file_path);
+
     let inode = &mut MinixFileSystem::open(8, file_path).unwrap();
-    let test_string = String::from("something");
+    let test_string = String::from(content);
     let mut bytes = test_string.into_bytes();
     let len = bytes.len();
     let buffer = bytes.as_mut_ptr();
 
     let bytes_write = &MinixFileSystem::write(8, inode, buffer, len as u32, 0);
     println!("write bytes: {}", bytes_write);
+
     kfree(buffer);
 }
 
@@ -158,11 +166,11 @@ fn show_inode_stat(inode: &Inode) {
     println!("{:?}", MinixFileSystem.stat(inode));
 }
 
-fn test_delete_file() {
+fn test_delete_file(file_path: &str) {
     println!();
     print_divider("Delete file");
-    println!("/file.txt deleted");
-    MinixFileSystem::delete(8, "/file.txt", 3);
+    println!("{} deleted", file_path);
+    MinixFileSystem::delete(8, file_path, 3);
 }
 
 fn print_divider(string: &str) {
