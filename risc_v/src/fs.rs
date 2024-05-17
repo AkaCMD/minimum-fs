@@ -188,6 +188,7 @@ impl MinixFileSystem {
             );
         }
     }
+    
 
     /// Create a new file with content
     pub fn create(bdev: usize, name: &str, mode: u16, size: u32) -> Result<(), FsError> {
@@ -212,6 +213,7 @@ impl MinixFileSystem {
             zones: [0; 10],
         };
         // TODO: finish it
+
         unimplemented!();
     }
 
@@ -519,7 +521,7 @@ impl MinixFileSystem {
         bytes_read
     }
 
-    // TODO: Change the info of file after write
+    // TODO: Change the info of file after write, change inode size
     pub fn write(bdev: usize, inode: &mut Inode, buffer: *mut u8, size: u32, offset: u32) -> u32 {
         let mut blocks_seen = 0u32;
         let offset_block = offset / BLOCK_SIZE;
@@ -712,12 +714,11 @@ impl MinixFileSystem {
                 }
             }
         }
-        // TODO: Change inode size
         inode.size = bytes_write;
         bytes_write
     }
 
-    pub fn delete(bdev: usize, path: &str) {
+    pub fn delete(bdev: usize, path: &str, inode_num: usize) {
         // TODO: Delete file and refresh cache
         // 1. delete directory in BTree
         let inode = Self::open(bdev, path).unwrap();
@@ -729,20 +730,38 @@ impl MinixFileSystem {
                 MFS_INODE_CACHE[bdev - 1].replace(cache);
             }
         }
-
+        /* 
         // 2. clear zones, change zone bitmap from 1 to 0
-        // for i in inode.zones {
-        //     if i !=0 {
-        //         let zmap_offset = Self::get_zmap_offset(i as usize);
-        //         let nth = i % 8;
-        //         let buffer = Buffer::new(1);
-        //         syc_write(bdev, buffer as *mut u8, 1, zmap_offset as u32);
-        //     }
-        // }
+        for i in inode.zones {
+            if i !=0 {
+                let zmap_offset = Self::get_zmap_offset(i as usize);
+                println!("zmap offset: {}", zmap_offset);
+                let nth = i % 8;
+                let mut buffer = Buffer::new(1);
+                syc_read(bdev, buffer.get_mut(), 1, zmap_offset as u32);
+                // invert the nth bit in buffer
+                buffer[0] &= !(1 << nth);
+                // write back the buffer
+                syc_write(bdev, buffer.get_mut(), 1, zmap_offset as u32);
+            }
+        }
 
         // 3. clear inode, change inode bitmap from 1 to 0
+        let imap_offset = Self::get_imap_offset(inode_num as usize);
+        let nth = inode_num % 8;
+        let mut buffer = Buffer::new(1);
+        syc_read(bdev, buffer.get_mut(), 1, imap_offset as u32);
+        // invert the nth bit in buffer
+        buffer[0] &= !(1 << nth);
+        // write back the buffer
+        syc_write(bdev, buffer.get_mut(), 1, imap_offset as u32);
 
+        // clear buffer
+        let mut buffer = Buffer::new(1);
+    
+        // 4. clear inode area
         //Self::write(bdev, &mut inode, buffer, inode.size, 0);
+        */
     }
 
     pub fn stat(&self, inode: &Inode) -> Stat {

@@ -1,3 +1,5 @@
+use core::slice;
+
 use alloc::string::String;
 
 use crate::block;
@@ -13,14 +15,10 @@ pub fn test() {
     greetings();
     MinixFileSystem::show_fs_info(8);
     test_block_driver();
-    test_read_file();
+    //test_read_file();
     test_open_file("/hello.txt");
-    //test_find_free_inode();
-    test_write_block();
-
-    test_open_file("/file.txt");
-    test_write_file();
-    test_open_file("/file.txt");
+    test_find_free_inode();
+    //test_write_block();
 
     test_delete_file();
     MinixFileSystem::show_fs_info(8);
@@ -46,17 +44,17 @@ __________________________________________________
 fn test_read_file() {
     println!();
     print_divider("Reading from file");
-    println!("inode #4: ");
-    let buffer = kmalloc(100);
+    println!("inode #2: ");
+    let buffer = kmalloc(200);
     // device, inode, buffer, size, offset
-    let bytes_read = syscall_fs_read(8, 4, buffer, 100, 0);
-    if bytes_read != 53 {
+    let bytes_read = syscall_fs_read(8, 2, buffer, 200, 0);
+    if bytes_read != 13 {
         println!(
-            "Read {} bytes, but I thought the file was 53 bytes.",
+            "Read {} bytes, but I thought the file was 11 bytes.",
             bytes_read
         );
     } else {
-        for i in 0..53 {
+        for i in 0..13 {
             print!("{}", unsafe { buffer.add(i).read() as char });
         }
         println!();
@@ -90,16 +88,18 @@ fn test_block_driver() {
 // Open(read) file by its name
 fn test_open_file(path: &str) {
     println!();
-    print_divider("Open file");
+    print_divider("Open and read file");
     println!("{} opened", path);
-    let buffer = kmalloc(100);
+    let buffer = kmalloc(512);
     let inode = &MinixFileSystem::open(8, path).unwrap();
     let size = inode.size;
-    MinixFileSystem::read(8, inode, buffer, 100, 0);
+    let read_size = MinixFileSystem::read(8, inode, buffer, 512, 0);
     println!();
     println!("{}", path);
-    for i in 0..size as usize {
-        print!("{}", unsafe { buffer.add(i).read() as char });
+    println!("file size: {}", size);
+    println!("read size: {}", read_size);
+    for i in 0..read_size as usize {
+        print!("{}", unsafe { buffer.add(i).read() as char});
     }
     println!();
     kfree(buffer);
@@ -162,7 +162,7 @@ fn test_delete_file() {
     println!();
     print_divider("Delete file");
     println!("/file.txt deleted");
-    MinixFileSystem::delete(8, "/file.txt");
+    MinixFileSystem::delete(8, "/file.txt", 3);
 }
 
 fn print_divider(string: &str) {
