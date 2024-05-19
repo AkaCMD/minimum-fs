@@ -1,8 +1,9 @@
 use alloc::string::String;
 
 use crate::block;
+use crate::buffer::Buffer;
 // test.rs
-use crate::fs::{Inode, MinixFileSystem};
+use crate::fs::{Inode, MinixFileSystem, BLOCK_SIZE};
 use crate::kmem::{self, kfree, kmalloc};
 use crate::syscall::*;
 /// Test block will load raw binaries into memory to execute them. This function
@@ -54,9 +55,9 @@ fn test_read_file_with_inode(inode_num: u32) {
     println!();
     print_divider("Reading from file");
     println!("inode #{}: ", inode_num);
-    let buffer = kmalloc(200);
+    let mut buffer = Buffer::new(BLOCK_SIZE as usize);
     // device, inode, buffer, size, offset
-    let bytes_read = syscall_fs_read(8, inode_num, buffer, 200, 0);
+    let bytes_read = syscall_fs_read(8, inode_num, buffer.get_mut(), buffer.len() as u32, 0);
     if bytes_read != 33 {
         println!(
             "Read {} bytes, but I thought the file was 11 bytes.",
@@ -64,11 +65,11 @@ fn test_read_file_with_inode(inode_num: u32) {
         );
     } else {
         for i in 0..33 {
-            print!("{}", unsafe { buffer.add(i).read() as char });
+            print!("{}", unsafe { buffer.get_mut().add(i).read() as char });
         }
         println!();
     }
-    kfree(buffer);
+    kfree(buffer.get_mut());
 }
 
 fn test_find_free_inode() {
@@ -81,15 +82,15 @@ fn test_find_free_inode() {
 fn test_block_driver() {
     println!();
     print_divider("Testing block driver");
-    let buffer = kmem::kmalloc(512);
-    let _ = block::read(8, buffer, 512, 0x400);
+    let mut buffer = Buffer::new(BLOCK_SIZE as usize);
+    let _ = block::read(8, buffer.get_mut(), buffer.len() as u32, 0x400);
     for i in 0..48 {
-        print!(" {:02x}", unsafe { buffer.add(i).read() });
+        print!(" {:02x}", unsafe { buffer.get_mut().add(i).read() });
         if 0 == ((i + 1) % 24) {
             println!();
         }
     }
-    kmem::kfree(buffer);
+    kmem::kfree(buffer.get_mut());
     println!("Block driver done");
 }
 
@@ -133,15 +134,17 @@ fn test_write_block() {
     kmem::kfree(buffer);
     println!("write size: {} bytes", len);
     println!("now read: ");
-    let read_buffer = kmalloc(512);
-    let _ = block::read(8, read_buffer, 512, 0xadc00);
+    let mut read_buffer = Buffer::new(BLOCK_SIZE as usize);
+    let _ = block::read(8, read_buffer.get_mut(), read_buffer.len() as u32, 0xadc00);
     for i in 0..len {
-        print!("{}", unsafe { read_buffer.add(i as usize).read() as char });
+        print!("{}", unsafe {
+            read_buffer.get_mut().add(i as usize).read() as char
+        });
         if 0 == ((i + 1) % 24) {
             println!();
         }
     }
-    kfree(read_buffer);
+    kfree(read_buffer.get_mut());
     println!("\nWrite to block driver done!");
 }
 

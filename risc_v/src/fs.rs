@@ -212,7 +212,6 @@ impl MinixFileSystem {
             zones: [0; 10],
         };
         // TODO: finish it
-
         unimplemented!();
     }
 
@@ -537,6 +536,8 @@ impl MinixFileSystem {
         let iizones = iiindirect_buffer.get() as *const u32;
         let iiizones = iiindirect_buffer.get() as *const u32;
 
+        let mut temp_buffer = Buffer::new(BLOCK_SIZE as usize);
+
         // ////////////////////////////////////////////
         // // DIRECT ZONES
         // ////////////////////////////////////////////
@@ -549,7 +550,37 @@ impl MinixFileSystem {
             }
             if offset_block <= blocks_seen {
                 let zone_offset = inode.zones[i] * BLOCK_SIZE;
-                syc_write(bdev, buffer, BLOCK_SIZE, zone_offset);
+                // 读-修改-写（Read-Modify-Write）操作：
+                // 读取块：首先读取目标块（512字节）到内存中。
+                // 修改块：在内存中修改相应的字节。
+                // 写回块：将修改后的块写回到设备中。
+                // TODO: move this to syc_write
+                syc_read(
+                    bdev,
+                    temp_buffer.get_mut(),
+                    temp_buffer.len() as u32,
+                    zone_offset,
+                ); // 检查temp_buffer的长度是否足够
+                println!(
+                    "temp_buffer size: {}, buffer size: {}",
+                    temp_buffer.len(),
+                    size
+                );
+                if temp_buffer.len() >= size as usize {
+                    // 使用memcpy拷贝数据
+                    unsafe {
+                        memcpy(temp_buffer.get_mut(), buffer, size as usize);
+                    }
+                } else {
+                    println!("temp_buffer 的长度不足以容纳 buffer 内容");
+                }
+
+                syc_write(
+                    bdev,
+                    temp_buffer.get_mut(),
+                    temp_buffer.len() as u32,
+                    zone_offset,
+                );
 
                 let write_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
                     bytes_left
@@ -714,6 +745,8 @@ impl MinixFileSystem {
             }
         }
         inode.size = bytes_write;
+        // TODO: update meta data in block device, i.e. inode size
+
         bytes_write
     }
 
