@@ -15,6 +15,7 @@ pub fn test() {
     greetings();
 
     MinixFileSystem::show_fs_info(8);
+    MinixFileSystem::show_all_file_paths(8);
 
     test_block_driver();
     test_read_file_with_inode(2);
@@ -25,13 +26,13 @@ pub fn test() {
     // before write: print file.txt content
     test_open_file("/file.txt");
 
-    test_write_file("/file.txt", "cmd here");
+    test_write_file("/hello.txt", "do not looking back in anger, buddy!");
 
     // after write: print file.txt content
-    test_open_file("/file.txt");
+    test_open_file("/hello.txt");
 
     test_delete_file("/file.txt");
-    MinixFileSystem::show_fs_info(8);
+    MinixFileSystem::show_all_file_paths(8);
     // 	let path = "/shell\0".as_bytes().as_ptr();
     // 	syscall::syscall_execv(path,0);
     // 	println!("I should never get here, execv should destroy our process.");
@@ -99,22 +100,23 @@ fn test_open_file(path: &str) {
     println!();
     print_divider("Open and read file");
     println!("{} opened", path);
-    let buffer = kmalloc(512);
+    let mut buffer = Buffer::new(BLOCK_SIZE as usize);
     let inode = &MinixFileSystem::open(8, path).unwrap();
     let size = inode.size;
-    let read_size = MinixFileSystem::read(8, inode, buffer, 512, 0);
+    let read_size = MinixFileSystem::read(8, inode, buffer.get_mut(), buffer.len() as u32, 0);
     println!();
     println!("{}", path);
     println!("file size: {}", size);
     println!("read size: {}", read_size);
     for i in 0..read_size as usize {
-        print!("{}", unsafe { buffer.add(i).read() as char });
+        print!("{}", unsafe { buffer.get_mut().add(i).read() as char });
     }
     println!();
-    kfree(buffer);
+    kfree(buffer.get_mut());
 }
 
 // Writing to block and read back
+#[allow(dead_code)]
 fn test_write_block() {
     println!();
     print_divider("Write to block");
@@ -165,6 +167,7 @@ fn test_write_file(file_path: &str, content: &str) {
     kfree(buffer);
 }
 
+#[allow(dead_code)]
 fn show_inode_stat(inode: &Inode) {
     println!("{:?}", MinixFileSystem.stat(inode));
 }

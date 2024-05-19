@@ -519,13 +519,12 @@ impl MinixFileSystem {
         bytes_read
     }
 
-    // TODO: Change the info of file after write, change inode size
     pub fn write(bdev: usize, inode: &mut Inode, buffer: *mut u8, size: u32, offset: u32) -> u32 {
         let mut blocks_seen = 0u32;
         let offset_block = offset / BLOCK_SIZE;
         let mut offset_byte = offset % BLOCK_SIZE;
 
-        let mut bytes_left = if size > inode.size { inode.size } else { size };
+        let mut bytes_left = size;
         let mut bytes_write = 0u32;
 
         let mut indirect_buffer = Buffer::new(BLOCK_SIZE as usize);
@@ -535,8 +534,6 @@ impl MinixFileSystem {
         let izones = indirect_buffer.get() as *const u32;
         let iizones = iiindirect_buffer.get() as *const u32;
         let iiizones = iiindirect_buffer.get() as *const u32;
-
-        let mut temp_buffer = Buffer::new(BLOCK_SIZE as usize);
 
         // ////////////////////////////////////////////
         // // DIRECT ZONES
@@ -550,37 +547,8 @@ impl MinixFileSystem {
             }
             if offset_block <= blocks_seen {
                 let zone_offset = inode.zones[i] * BLOCK_SIZE;
-                // 读-修改-写（Read-Modify-Write）操作：
-                // 读取块：首先读取目标块（512字节）到内存中。
-                // 修改块：在内存中修改相应的字节。
-                // 写回块：将修改后的块写回到设备中。
-                // TODO: move this to syc_write
-                syc_read(
-                    bdev,
-                    temp_buffer.get_mut(),
-                    temp_buffer.len() as u32,
-                    zone_offset,
-                ); // 检查temp_buffer的长度是否足够
-                println!(
-                    "temp_buffer size: {}, buffer size: {}",
-                    temp_buffer.len(),
-                    size
-                );
-                if temp_buffer.len() >= size as usize {
-                    // 使用memcpy拷贝数据
-                    unsafe {
-                        memcpy(temp_buffer.get_mut(), buffer, size as usize);
-                    }
-                } else {
-                    println!("temp_buffer 的长度不足以容纳 buffer 内容");
-                }
 
-                syc_write(
-                    bdev,
-                    temp_buffer.get_mut(),
-                    temp_buffer.len() as u32,
-                    zone_offset,
-                );
+                syc_write(bdev, buffer, size, zone_offset);
 
                 let write_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
                     bytes_left
@@ -618,7 +586,7 @@ impl MinixFileSystem {
                 unsafe {
                     if izones.add(i).read() != 0 {
                         if offset_block <= blocks_seen {
-                            syc_write(bdev, buffer, BLOCK_SIZE, BLOCK_SIZE * izones.add(i).read());
+                            syc_write(bdev, buffer, size, BLOCK_SIZE * izones.add(i).read());
                             let write_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
                                 bytes_left
                             } else {
@@ -662,7 +630,7 @@ impl MinixFileSystem {
                                     syc_write(
                                         bdev,
                                         buffer,
-                                        BLOCK_SIZE,
+                                        size,
                                         BLOCK_SIZE * iizones.add(j).read(),
                                     );
                                     let write_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
@@ -718,7 +686,7 @@ impl MinixFileSystem {
                                             syc_write(
                                                 bdev,
                                                 buffer,
-                                                BLOCK_SIZE,
+                                                size,
                                                 BLOCK_SIZE * iiizones.add(k).read(),
                                             );
                                             let write_this_many =
@@ -834,33 +802,62 @@ impl MinixFileSystem {
         if super_block.magic == MAGIC {
             println!("\nFilesystem Superblock Info: ");
             println!("{:#?}", super_block);
-
-            println!("\nNow list all existed files: ");
-            if let Some(cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
-                for (path, _) in cache.iter() {
-                    println!("{}", path);
-                }
-                unsafe {
-                    MFS_INODE_CACHE[bdev - 1].replace(cache);
-                }
-            }
         }
     }
 
-    pub fn show_file_tree() {
-        // TODO: Implement this
+    pub fn show_all_file_paths(bdev: usize) {
+        println!("\nNow list all existed files: ");
+        if let Some(cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
+            for (path, _) in cache.iter() {
+                println!("{}", path);
+            }
+            unsafe {
+                MFS_INODE_CACHE[bdev - 1].replace(cache);
+            }
+        }
     }
 }
 
 /// This is a wrapper function around the syscall_block_read. This allows me to do
-/// other things before I call the system call (or after). However, all the things I
-/// wanted to do are no longer there, so this is a worthless function.
+/// other things before I call the system call (or after).
 fn syc_read(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
     syscall_block_read(bdev, buffer, size, offset)
 }
 
 fn syc_write(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
-    syscall_block_write(bdev, buffer, size, offset)
+    let actual_buffer_size = if size % BLOCK_SIZE == 0 {
+        size
+    } else {
+        ((size / BLOCK_SIZE) + 1) * BLOCK_SIZE
+    };
+    let mut actual_buffer = Buffer::new(actual_buffer_size as usize);
+    // Read-Modify-Write:
+    // read block: first read multiple block size of data into memory.
+    // modify block: then modify the data in memory.
+    // write back: then write back the modified data.
+    syc_read(
+        bdev,
+        actual_buffer.get_mut(),
+        actual_buffer.len() as u32,
+        offset,
+    );
+    println!(
+        "temp_buffer size: {}, buffer size: {}",
+        actual_buffer.len(),
+        size
+    );
+    assert!(actual_buffer.len() >= size as usize);
+    // Using memcpy to copy data
+    unsafe {
+        memcpy(actual_buffer.get_mut(), buffer, size as usize);
+    }
+
+    syscall_block_write(
+        bdev,
+        actual_buffer.get_mut(),
+        actual_buffer.len() as u32,
+        offset,
+    )
 }
 
 // We have to start a process when reading from a file since the block
@@ -959,10 +956,6 @@ pub fn process_write(pid: u16, dev: usize, node: u32, buffer: *mut u8, size: u32
     let boxed_args = Box::new(args);
     set_waiting(pid);
     let _ = add_kernel_process_args(write_proc, Box::into_raw(boxed_args) as usize);
-}
-
-fn inverse_nth_bit(nth: u32) {
-    // TODO: implement this
 }
 
 /// Stats on a file. This generally mimics an inode
