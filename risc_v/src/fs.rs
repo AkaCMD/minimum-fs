@@ -824,7 +824,7 @@ fn syc_read(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
     syscall_block_read(bdev, buffer, size, offset)
 }
 
-fn syc_write(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
+pub fn syc_write(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
     let actual_buffer_size = if size % BLOCK_SIZE == 0 {
         size
     } else {

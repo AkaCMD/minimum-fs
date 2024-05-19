@@ -1,7 +1,7 @@
-use alloc::string::String;
+use alloc::string::{String, ToString};
 
-use crate::block;
 use crate::buffer::Buffer;
+use crate::{block, fs};
 // test.rs
 use crate::fs::{Inode, MinixFileSystem, BLOCK_SIZE};
 use crate::kmem::{self, kfree, kmalloc};
@@ -11,7 +11,7 @@ use crate::syscall::*;
 pub fn test() {
     // The majority of the testing code needs to move into a system call (execv maybe?)
     MinixFileSystem::init(8);
-
+    test_func();
     greetings();
 
     MinixFileSystem::show_fs_info(8);
@@ -26,7 +26,7 @@ pub fn test() {
     // before write: print file.txt content
     test_open_file("/file.txt");
 
-    test_write_file("/hello.txt", "do not looking back in anger, buddy!");
+    test_write_file("/hello.txt", "do not looking back in anger, buddy........");
 
     // after write: print file.txt content
     test_open_file("/hello.txt");
@@ -59,17 +59,11 @@ fn test_read_file_with_inode(inode_num: u32) {
     let mut buffer = Buffer::new(BLOCK_SIZE as usize);
     // device, inode, buffer, size, offset
     let bytes_read = syscall_fs_read(8, inode_num, buffer.get_mut(), buffer.len() as u32, 0);
-    if bytes_read != 33 {
-        println!(
-            "Read {} bytes, but I thought the file was 11 bytes.",
-            bytes_read
-        );
-    } else {
-        for i in 0..33 {
-            print!("{}", unsafe { buffer.get_mut().add(i).read() as char });
-        }
-        println!();
+
+    for i in 0..bytes_read {
+        print!("{}", unsafe { buffer.get_mut().add(i).read() as char });
     }
+    println!();
     kfree(buffer.get_mut());
 }
 
@@ -120,7 +114,7 @@ fn test_open_file(path: &str) {
 fn test_write_block() {
     println!();
     print_divider("Write to block");
-    let test_string = String::from("Hello, block!");
+    let test_string = String::from("Hello, block!.................");
     let mut bytes = test_string.into_bytes();
     let len = bytes.len() as u32;
     let buffer = bytes.as_mut_ptr();
@@ -161,7 +155,14 @@ fn test_write_file(file_path: &str, content: &str) {
     let len = bytes.len();
     let buffer = bytes.as_mut_ptr();
 
-    let bytes_write = &MinixFileSystem::write(8, inode, buffer, len as u32, 0);
+    let bytes_write = MinixFileSystem::write(8, inode, buffer, len as u32, 0);
+    // Update file size
+    // fs::syc_write(
+    //     8,
+    //     inode as *mut Inode as *mut u8,
+    //     core::mem::size_of::<Inode>() as u32,
+    //     MinixFileSystem::get_inode_offset(2) as u32,
+    // );
     println!("write bytes: {}", bytes_write);
 
     kfree(buffer);
@@ -170,6 +171,21 @@ fn test_write_file(file_path: &str, content: &str) {
 #[allow(dead_code)]
 fn show_inode_stat(inode: &Inode) {
     println!("{:?}", MinixFileSystem.stat(inode));
+}
+
+#[allow(dead_code)]
+fn test_func() {
+    println!(
+        "Inode 2 imap offset: {:x}",
+        MinixFileSystem::get_imap_offset(2)
+    );
+    println!("Inode 2 offset: {:x}", MinixFileSystem::get_inode_offset(2));
+    fs::syc_write(
+        8,
+        "ok".to_string().as_mut_ptr(),
+        "ok".bytes().len() as u32,
+        0xae000,
+    );
 }
 
 fn test_delete_file(file_path: &str) {
