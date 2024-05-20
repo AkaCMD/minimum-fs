@@ -785,9 +785,10 @@ impl MinixFileSystem {
     }
 
     pub fn get_inode_offset(inode_num: usize) -> usize {
-        (2 + 2/* imap blocks */ + 4/* zmap blocks */) as usize * BLOCK_SIZE as usize
-            + ((inode_num as usize - 1) / (BLOCK_SIZE as usize / size_of::<Inode>()))
-                * BLOCK_SIZE as usize
+        // (2 + 2/* imap blocks */ + 4/* zmap blocks */) as usize * BLOCK_SIZE as usize
+        //     + ((inode_num as usize - 1) / (BLOCK_SIZE as usize / size_of::<Inode>()))
+        //         * BLOCK_SIZE as usize
+        0x2048 + (inode_num - 2) * 0x40
     }
 
     pub fn get_zone_offset(zone_num: usize) -> usize {
@@ -825,38 +826,45 @@ fn syc_read(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
 }
 
 pub fn syc_write(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
-    let actual_buffer_size = if size % BLOCK_SIZE == 0 {
-        size
-    } else {
-        ((size / BLOCK_SIZE) + 1) * BLOCK_SIZE
-    };
+    // Calculate the start and end blocks for read-modify-write
+    let block_start = offset / BLOCK_SIZE;
+    let block_end = (offset + size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    // Calculate the actual size to read/write, aligned to block boundaries
+    let actual_buffer_size = (block_end - block_start) * BLOCK_SIZE;
+
+    // Allocate buffer for the entire block range
     let mut actual_buffer = Buffer::new(actual_buffer_size as usize);
-    // Read-Modify-Write:
-    // read block: first read multiple block size of data into memory.
-    // modify block: then modify the data in memory.
-    // write back: then write back the modified data.
+
+    // Read the data covering the range to modify
     syc_read(
         bdev,
         actual_buffer.get_mut(),
-        actual_buffer.len() as u32,
-        offset,
+        actual_buffer_size as u32,
+        block_start * BLOCK_SIZE,
     );
-    println!(
-        "temp_buffer size: {}, buffer size: {}",
-        actual_buffer.len(),
-        size
-    );
-    assert!(actual_buffer.len() >= size as usize);
-    // Using memcpy to copy data
+
+    // Calculate the offset within the buffer where the write should start
+    let internal_offset = (offset % BLOCK_SIZE) as usize;
+
+    // Ensure the read data covers the entire range to be written
+    assert!(internal_offset + size as usize <= actual_buffer.len());
+
+    // Copy the data to the appropriate location within the buffer
     unsafe {
-        memcpy(actual_buffer.get_mut(), buffer, size as usize);
+        memcpy(
+            actual_buffer.get_mut().add(internal_offset),
+            buffer,
+            size as usize,
+        );
     }
 
+    // Write the modified buffer back to the device
     syscall_block_write(
         bdev,
         actual_buffer.get_mut(),
-        actual_buffer.len() as u32,
-        offset,
+        actual_buffer_size as u32,
+        block_start * BLOCK_SIZE,
     )
 }
 

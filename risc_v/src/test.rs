@@ -1,3 +1,5 @@
+use core::mem;
+
 use alloc::string::{String, ToString};
 
 use crate::buffer::Buffer;
@@ -26,7 +28,11 @@ pub fn test() {
     // before write: print file.txt content
     test_open_file("/file.txt");
 
-    test_write_file("/hello.txt", "do not looking back in anger, buddy........");
+    test_write_file(
+        "/hello.txt",
+        "do not looking back in anger, buddy........",
+        2,
+    );
 
     // after write: print file.txt content
     test_open_file("/hello.txt");
@@ -145,7 +151,7 @@ fn test_write_block() {
     println!("\nWrite to block driver done!");
 }
 
-fn test_write_file(file_path: &str, content: &str) {
+fn test_write_file(file_path: &str, content: &str, inode_num: u32) {
     println!();
     print_divider("Writing to file");
     println!("{}:", file_path);
@@ -157,13 +163,24 @@ fn test_write_file(file_path: &str, content: &str) {
     let buffer = bytes.as_mut_ptr();
 
     let bytes_write = MinixFileSystem::write(8, inode, buffer, len as u32, 0);
+
+    let mut memory: [u8; mem::size_of::<u32>()] = [0; mem::size_of::<u32>()];
+
+    let ptr: *mut u8 = memory.as_mut_ptr();
+
+    unsafe {
+        let num_ptr: *mut u32 = ptr as *mut u32;
+        *num_ptr = len as u32;
+    }
     // Update file size
-    // fs::syc_write(
-    //     8,
-    //     inode as *mut Inode as *mut u8,
-    //     core::mem::size_of::<Inode>() as u32,
-    //     MinixFileSystem::get_inode_offset(2) as u32,
-    // );
+    inode.size = len as u32;
+    fs::syc_write(
+        8,
+        ptr,
+        mem::size_of::<u32>() as u32,
+        MinixFileSystem::get_inode_offset(inode_num as usize) as u32,
+    );
+    // TODO: update inode cache
     println!("write bytes: {}", bytes_write);
 
     kfree(buffer);
@@ -185,7 +202,7 @@ fn test_func() {
         8,
         "ok".to_string().as_mut_ptr(),
         "ok".bytes().len() as u32,
-        0xae000,
+        0xae010,
     );
 }
 
