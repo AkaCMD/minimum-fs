@@ -551,7 +551,7 @@ pub fn syscall_block_write(dev: usize, buffer: *mut u8, size: u32, offset: u32) 
 
 /// This is a helper function ran as a process in kernel space
 /// to finish loading and executing a process.
-fn exec_func(args: usize) {
+pub fn exec_func(args: usize) {
     unsafe {
         // We got the inode from the syscall. Its Box rid itself of control, so
         // we take control back here. The Box now owns the Inode and will complete

@@ -1,10 +1,10 @@
 use alloc::string::{String, ToString};
 
 use crate::buffer::Buffer;
-use crate::{block, fs};
+use crate::{block, elf, fs};
 // test.rs
 use crate::fs::{Inode, MinixFileSystem, BLOCK_SIZE};
-use crate::kmem::{self, kfree, kmalloc};
+use crate::kmem::{self, kfree};
 use crate::syscall::*;
 /// Test block will load raw binaries into memory to execute them. This function
 /// will load ELF files and try to execute them.
@@ -33,8 +33,9 @@ pub fn test() {
 
     test_delete_file("/file.txt");
     MinixFileSystem::show_all_file_paths(8);
-    // 	let path = "/shell\0".as_bytes().as_ptr();
-    // 	syscall::syscall_execv(path,0);
+    // syscall_execv("/helloworld.elf\0".as_bytes().as_ptr(), 0);
+    // let path = "/shell\0".as_bytes().as_ptr();
+    // syscall::syscall_execv(path, 0);
     // 	println!("I should never get here, execv should destroy our process.");
 }
 
@@ -210,4 +211,22 @@ fn print_divider(string: &str) {
         "-----------------------<{} {} {}>-----------------------",
         left_padding, string, right_padding
     );
+}
+
+#[allow(dead_code)]
+fn test_elf() {
+    let files_inode = 4u32;
+    let file_size = 14776;
+    let bytes_to_read = 1024 * 50;
+    let mut buffer = Buffer::new(bytes_to_read as usize);
+    let bytes_read = syscall_fs_read(8, files_inode, buffer.get_mut(), bytes_to_read as u32, 0);
+    if bytes_read != file_size {
+        println!(
+            "Unable to load program at inode {}, which should \
+            be {} bytes, got {}",
+            files_inode, file_size, bytes_read
+        );
+    } else {
+        let _ = elf::File::load_proc(&buffer);
+    }
 }
