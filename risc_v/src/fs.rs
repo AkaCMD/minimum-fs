@@ -189,6 +189,17 @@ impl MinixFileSystem {
         }
     }
 
+    pub fn refresh(bdev: usize) {
+        let mut btm = BTreeMap::new();
+        let cwd = String::from("/");
+
+        // Let's look at the root (inode #1)
+        Self::cache_at(&mut btm, &cwd, 1, bdev);
+        unsafe {
+            MFS_INODE_CACHE[bdev - 1] = Some(btm);
+        }
+    }
+
     /// Create a new file with content
     pub fn create(bdev: usize, name: &str, mode: u16, size: u32) -> Result<(), FsError> {
         // Check if the file already exists

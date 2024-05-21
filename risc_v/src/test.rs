@@ -180,7 +180,8 @@ fn test_write_file(file_path: &str, content: &str, inode_num: u32) {
         mem::size_of::<u32>() as u32,
         MinixFileSystem::get_inode_offset(inode_num as usize) as u32,
     );
-    // TODO: update inode cache
+
+    MinixFileSystem::refresh(8);
     println!("write bytes: {}", bytes_write);
 
     kfree(buffer);
