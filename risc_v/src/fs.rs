@@ -714,6 +714,9 @@ impl MinixFileSystem {
     pub fn delete(bdev: usize, path: &str, inode_num: usize) {
         if let Some(mut cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
             Self::delete_inode_and_direntry(&mut cache, &path.to_string(), inode_num as u32, bdev);
+            unsafe {
+                MFS_INODE_CACHE[bdev - 1].replace(cache);
+            }
         }
         MinixFileSystem::refresh(bdev);
     }
@@ -789,6 +792,116 @@ impl MinixFileSystem {
             imap_offset as u32,
         );
     }
+
+    pub fn create(bdev: usize, cwd: &str, filename: &str) {
+        if let Some(mut cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
+            Self::create_new_file(&mut cache, &cwd.to_string(), filename, bdev);
+            unsafe {
+                MFS_INODE_CACHE[bdev - 1].replace(cache);
+            }
+        }
+        MinixFileSystem::refresh(bdev);
+    }
+
+    fn create_new_file(
+        btm: &mut BTreeMap<String, Inode>,
+        cwd: &String,
+        filename: &str,
+        bdev: usize,
+    ) {
+        // Step 1: Allocate a new inode
+        let mut new_inode = Inode {
+            mode: 0o644,
+            nlinks: 1,
+            uid: 0,
+            gid: 0,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
+            zones: [0; 10],
+        };
+
+        // Find a free inode
+        let free_inode_num = MinixFileSystem::find_free_inode(bdev).unwrap();
+
+        // Step 2: Update the parent directory with the new directory entry
+        let parent_inode = match btm.get(cwd) {
+            Some(inode) => inode.clone(),
+            None => return,
+        };
+
+        // Create a new directory entry
+        let mut new_direntry = DirEntry {
+            inode: free_inode_num,
+            name: [0; 60],
+        };
+
+        // Copy the filename to the new directory entry's name
+        for (i, c) in filename.bytes().enumerate() {
+            if i >= 60 {
+                break;
+            }
+            new_direntry.name[i] = c;
+        }
+
+        // Step 3: Update the parent directory's content
+        let mut buf = Buffer::new(((parent_inode.size + BLOCK_SIZE - 1) & !BLOCK_SIZE) as usize);
+        let dirents = buf.get() as *mut DirEntry;
+        let sz = MinixFileSystem::read(bdev, &parent_inode, buf.get_mut(), BLOCK_SIZE, 0);
+
+        // Append the new directory entry to the buffer
+        let _dirent_offset = sz;
+        unsafe {
+            let new_direntry_ptr = dirents.add((sz / mem::size_of::<DirEntry>() as u32) as usize);
+            core::ptr::copy_nonoverlapping(&new_direntry as *const DirEntry, new_direntry_ptr, 1);
+        }
+
+        // Step 4: Update the imap to mark the new inode as allocated
+        let imap_offset = MinixFileSystem::get_imap_offset(free_inode_num as usize);
+        let nth = free_inode_num % 8;
+        let mut imap_buffer = Buffer::new(512);
+        syc_read(
+            bdev,
+            imap_buffer.get_mut(),
+            imap_buffer.len() as u32,
+            imap_offset as u32,
+        );
+        // Set the nth bit in imap
+        imap_buffer[0] |= 1 << nth;
+
+        // Write back the updated imap
+        syc_write(
+            bdev,
+            imap_buffer.get_mut(),
+            imap_buffer.len() as u32,
+            imap_offset as u32,
+        );
+
+        // Step 5: Write the new inode to the block device
+        let new_inode_offset = MinixFileSystem::get_inode_offset(free_inode_num as usize);
+        let mut new_inode_buffer = Buffer::new(size_of::<Inode>());
+        unsafe {
+            let new_inode_ptr = new_inode_buffer.get_mut() as *mut Inode;
+            core::ptr::copy_nonoverlapping(&new_inode, new_inode_ptr, 1);
+        }
+        MinixFileSystem::write(
+            bdev,
+            &mut new_inode,
+            new_inode_buffer.get_mut(),
+            size_of::<Inode>() as u32,
+            new_inode_offset as u32,
+        );
+
+        // Add the new inode to the BTreeMap
+        let mut new_file_path = cwd.clone();
+        if !cwd.ends_with('/') {
+            new_file_path.push('/');
+        }
+        new_file_path.push_str(filename);
+        btm.insert(new_file_path, new_inode);
+    }
+    
 
     pub fn stat(&self, inode: &Inode) -> Stat {
         Stat {

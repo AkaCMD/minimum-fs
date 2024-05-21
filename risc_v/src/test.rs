@@ -3,7 +3,7 @@ use crate::buffer::Buffer;
 use crate::fs::{Inode, MinixFileSystem, BLOCK_SIZE};
 use crate::kmem::{self, kfree};
 use crate::syscall::*;
-use crate::{block, elf, fs};
+use crate::{block, fs};
 use alloc::string::{String, ToString};
 use core::mem;
 
@@ -14,10 +14,11 @@ pub fn test() {
     greetings();
 
     MinixFileSystem::show_fs_info(8);
+    test_create_file("/", "hello.txt");
     MinixFileSystem::show_all_file_paths(8);
 
     test_block_driver();
-    test_read_file_with_inode(2);
+    test_read_file_with_inode(5);
     test_open_file("/hello.txt");
     test_find_free_inode();
     //test_write_block();
@@ -27,7 +28,7 @@ pub fn test() {
 
     test_write_file(
         "/hello.txt",
-        "do not looking back in anger, buddy........",
+        "Can you fry eggs on mount Everest?......",
         2,
     );
 
@@ -208,8 +209,15 @@ fn test_func() {
 fn test_delete_file(file_path: &str) {
     println!();
     print_divider("Delete file");
-    println!("{} deleted", file_path);
     MinixFileSystem::delete(8, file_path, 3);
+    println!("{} deleted", file_path);
+}
+
+fn test_create_file(cwd: &str, filename: &str) {
+    println!();
+    print_divider("Create file");
+    MinixFileSystem::create(8, cwd, filename);
+    println!("{} created", filename);
 }
 
 fn print_divider(string: &str) {
@@ -227,22 +235,4 @@ fn print_divider(string: &str) {
         "-----------------------<{} {} {}>-----------------------",
         left_padding, string, right_padding
     );
-}
-
-#[allow(dead_code)]
-fn test_elf() {
-    let files_inode = 4u32;
-    let file_size = 14776;
-    let bytes_to_read = 1024 * 50;
-    let mut buffer = Buffer::new(bytes_to_read as usize);
-    let bytes_read = syscall_fs_read(8, files_inode, buffer.get_mut(), bytes_to_read as u32, 0);
-    if bytes_read != file_size {
-        println!(
-            "Unable to load program at inode {}, which should \
-            be {} bytes, got {}",
-            files_inode, file_size, bytes_read
-        );
-    } else {
-        let _ = elf::File::load_proc(&buffer);
-    }
 }
