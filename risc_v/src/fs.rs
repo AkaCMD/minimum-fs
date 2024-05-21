@@ -8,8 +8,13 @@ use crate::{
 };
 
 use crate::{buffer::Buffer, cpu::memcpy};
-use alloc::{boxed::Box, collections::BTreeMap, string::String};
-use core::mem::size_of;
+use alloc::{
+    boxed::Box,
+    collections::BTreeMap,
+    string::{String, ToString},
+    vec,
+};
+use core::mem::{self, size_of};
 
 pub const MAGIC: u16 = 0x4d5a;
 pub const BLOCK_SIZE: u32 = 1024;
@@ -137,9 +142,13 @@ impl MinixFileSystem {
         let dirents = buf.get() as *const DirEntry;
         let sz = Self::read(bdev, &ino, buf.get_mut(), BLOCK_SIZE, 0);
         let num_dirents = sz as usize / size_of::<DirEntry>();
+
         // We start at 2 because the first two entries are . and ..
         for i in 2..num_dirents {
             unsafe {
+                if (*dirents.add(i)).inode == 0 {
+                    continue;
+                }
                 let ref d = *dirents.add(i);
                 let d_ino = Self::get_inode(bdev, d.inode).unwrap();
                 let mut new_cwd = String::with_capacity(120);
@@ -198,32 +207,6 @@ impl MinixFileSystem {
         unsafe {
             MFS_INODE_CACHE[bdev - 1] = Some(btm);
         }
-    }
-
-    /// Create a new file with content
-    pub fn create(bdev: usize, name: &str, mode: u16, size: u32) -> Result<(), FsError> {
-        // Check if the file already exists
-        if MinixFileSystem::open(bdev, name).is_ok() {
-            return Err(FsError::FileExists);
-        }
-
-        // Find a free inode
-        let inode_num = Self::find_free_inode(bdev).unwrap();
-
-        // Initialize a new inode
-        let new_inode = Inode {
-            mode: mode | S_IFREG,
-            nlinks: 1,
-            uid: 0, // Set appropriate UID
-            gid: 0, // Set appropriate GID
-            size,
-            atime: 0,
-            mtime: 0,
-            ctime: 0,
-            zones: [0; 10],
-        };
-        // TODO: finish it
-        unimplemented!();
     }
 
     /// Find a free inode in the filesystem
@@ -724,55 +707,87 @@ impl MinixFileSystem {
             }
         }
         inode.size = bytes_write;
-        // TODO: update meta data in block device, i.e. inode size
 
         bytes_write
     }
 
     pub fn delete(bdev: usize, path: &str, inode_num: usize) {
-        // TODO: Delete file and refresh cache
-        // 1. delete directory in BTree
-        let inode = Self::open(bdev, path).unwrap();
         if let Some(mut cache) = unsafe { MFS_INODE_CACHE[bdev - 1].take() } {
-            if let Some(_inode) = cache.get(path) {
-                cache.remove(path);
-            }
-            unsafe {
-                MFS_INODE_CACHE[bdev - 1].replace(cache);
-            }
+            Self::delete_inode_and_direntry(&mut cache, &path.to_string(), inode_num as u32, bdev);
         }
-        /*
-        // 2. clear zones, change zone bitmap from 1 to 0
-        for i in inode.zones {
-            if i !=0 {
-                let zmap_offset = Self::get_zmap_offset(i as usize);
-                println!("zmap offset: {}", zmap_offset);
-                let nth = i % 8;
-                let mut buffer = Buffer::new(1);
-                syc_read(bdev, buffer.get_mut(), 1, zmap_offset as u32);
-                // invert the nth bit in buffer
-                buffer[0] &= !(1 << nth);
-                // write back the buffer
-                syc_write(bdev, buffer.get_mut(), 1, zmap_offset as u32);
+        MinixFileSystem::refresh(bdev);
+    }
+
+    fn delete_inode_and_direntry(
+        btm: &mut BTreeMap<String, Inode>,
+        cwd: &String,
+        inode_num: u32,
+        bdev: usize,
+    ) {
+        // Step 1: Get the inode
+        let mut ino = match Self::get_inode(bdev, 1) {
+            Some(inode) => inode,
+            None => return,
+        };
+
+        // Step 2: Read the directory entries
+        let mut buf = Buffer::new(((ino.size + BLOCK_SIZE - 1) & !BLOCK_SIZE) as usize);
+        let dirents = buf.get() as *const DirEntry;
+        let sz = Self::read(bdev, &ino, buf.get_mut(), BLOCK_SIZE, 0);
+        let num_dirents = sz as usize / size_of::<DirEntry>();
+        println!("num_dirents: {}", num_dirents);
+
+        // Step 3: Find and remove the DirEntry
+        for i in 2..num_dirents {
+            unsafe {
+                let ref d = *dirents.add(i);
+                if d.inode == inode_num {
+                    // Mark this directory entry as deleted
+                    let dirent_buffer = buf.get_mut() as *mut DirEntry;
+                    (*dirent_buffer.add(i)).inode = 0;
+
+                    // Write the updated directory entries back to the disk
+                    Self::write(bdev, &mut ino, buf.get_mut(), sz, 0);
+
+                    // Remove the entry from the BTreeMap
+                    let mut path_to_remove = String::with_capacity(cwd.len() + 60);
+                    path_to_remove.push_str(cwd);
+                    if !cwd.ends_with('/') {
+                        path_to_remove.push('/');
+                    }
+                    for j in 0..60 {
+                        if d.name[j] == 0 {
+                            break;
+                        }
+                        path_to_remove.push(d.name[j] as char);
+                    }
+                    btm.remove(&path_to_remove);
+                    break;
+                }
             }
         }
 
-        // 3. clear inode, change inode bitmap from 1 to 0
+        // Step 4: Update the imap to mark the inode as free
         let imap_offset = Self::get_imap_offset(inode_num as usize);
         let nth = inode_num % 8;
-        let mut buffer = Buffer::new(1);
-        syc_read(bdev, buffer.get_mut(), 1, imap_offset as u32);
-        // invert the nth bit in buffer
-        buffer[0] &= !(1 << nth);
-        // write back the buffer
-        syc_write(bdev, buffer.get_mut(), 1, imap_offset as u32);
+        let mut imap_buffer = Buffer::new(512);
+        syc_read(
+            bdev,
+            imap_buffer.get_mut(),
+            imap_buffer.len() as u32,
+            imap_offset as u32,
+        );
 
-        // clear buffer
-        let mut buffer = Buffer::new(1);
+        // Clear the nth bit in imap
+        imap_buffer[0] &= !(1 << nth);
 
-        // 4. clear inode area
-        //Self::write(bdev, &mut inode, buffer, inode.size, 0);
-        */
+        // Write back the updated imap
+        syc_write(
+            bdev,
+            imap_buffer.get_mut(),
+            imap_buffer.len() as u32,
+            imap_offset as u32,
+        );
     }
 
     pub fn stat(&self, inode: &Inode) -> Stat {
@@ -833,7 +848,43 @@ impl MinixFileSystem {
 /// This is a wrapper function around the syscall_block_read. This allows me to do
 /// other things before I call the system call (or after).
 fn syc_read(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {
-    syscall_block_read(bdev, buffer, size, offset)
+    const BLOCK_SIZE: u32 = 512;
+
+    // Calculate the block boundaries
+    let block_start = offset / BLOCK_SIZE;
+    let block_end = (offset + size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    // Calculate the actual size to read, aligned to block boundaries
+    let actual_buffer_size = (block_end - block_start) * BLOCK_SIZE;
+
+    // Allocate a temporary buffer to read the aligned data
+    let mut temp_buffer = vec![0u8; actual_buffer_size as usize];
+
+    // Read the aligned data into the temporary buffer
+    let read_result = syscall_block_read(
+        bdev,
+        temp_buffer.as_mut_ptr(),
+        actual_buffer_size,
+        block_start * BLOCK_SIZE,
+    );
+
+    if read_result != 0 {
+        return read_result;
+    }
+
+    // Calculate the offset within the temporary buffer
+    let internal_offset = (offset % BLOCK_SIZE) as usize;
+
+    // Copy the relevant portion of the temporary buffer to the output buffer
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            temp_buffer.as_ptr().add(internal_offset),
+            buffer,
+            size as usize,
+        );
+    }
+
+    0 // Indicate success
 }
 
 pub fn syc_write(bdev: usize, buffer: *mut u8, size: u32, offset: u32) -> u8 {

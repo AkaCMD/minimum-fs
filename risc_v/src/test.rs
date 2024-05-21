@@ -1,19 +1,16 @@
-use core::mem;
-
-use alloc::string::{String, ToString};
-
-use crate::buffer::Buffer;
-use crate::{block, elf, fs};
 // test.rs
+use crate::buffer::Buffer;
 use crate::fs::{Inode, MinixFileSystem, BLOCK_SIZE};
 use crate::kmem::{self, kfree};
 use crate::syscall::*;
-/// Test block will load raw binaries into memory to execute them. This function
-/// will load ELF files and try to execute them.
+use crate::{block, elf, fs};
+use alloc::string::{String, ToString};
+use core::mem;
+
 pub fn test() {
     // The majority of the testing code needs to move into a system call (execv maybe?)
     MinixFileSystem::init(8);
-    test_func();
+    // test_func();
     greetings();
 
     MinixFileSystem::show_fs_info(8);
@@ -26,7 +23,7 @@ pub fn test() {
     //test_write_block();
 
     // before write: print file.txt content
-    test_open_file("/file.txt");
+    test_open_file("/hello.txt");
 
     test_write_file(
         "/hello.txt",
@@ -181,6 +178,7 @@ fn test_write_file(file_path: &str, content: &str, inode_num: u32) {
         MinixFileSystem::get_inode_offset(inode_num as usize) as u32,
     );
 
+    // Refresh the cache
     MinixFileSystem::refresh(8);
     println!("write bytes: {}", bytes_write);
 
