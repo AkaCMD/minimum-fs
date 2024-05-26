@@ -20,11 +20,11 @@ pub fn test() {
     test_block_driver();
     test_read_file_with_inode(5);
     test_open_file("/hello.txt");
-    test_find_free_inode();
+    //test_find_free_inode();
     //test_write_block();
 
     // before write: print file.txt content
-    test_open_file("/hello.txt");
+    test_open_file("/my_folder/file_3.txt");
 
     test_write_file(
         "/hello.txt",
