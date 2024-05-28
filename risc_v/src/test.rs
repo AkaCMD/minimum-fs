@@ -26,16 +26,12 @@ pub fn test() {
     // before write: print file.txt content
     test_open_file("/my_folder/file_3.txt");
 
-    test_write_file(
-        "/hello.txt",
-        "Can you fry eggs on mount Everest?......",
-        2,
-    );
+    test_write_file("/hello.txt", "Can you fry eggs on mount Everest?......", 2);
 
     // after write: print file.txt content
     test_open_file("/hello.txt");
 
-    test_delete_file("/file.txt");
+    test_delete_file("/file.txt", 3);
     MinixFileSystem::show_all_file_paths(8);
     // syscall_execv("/helloworld.elf\0".as_bytes().as_ptr(), 0);
     // let path = "/shell\0".as_bytes().as_ptr();
@@ -206,10 +202,10 @@ fn test_func() {
     );
 }
 
-fn test_delete_file(file_path: &str) {
+fn test_delete_file(file_path: &str, inode_num: u32) {
     println!();
     print_divider("Delete file");
-    MinixFileSystem::delete(8, file_path, 3);
+    MinixFileSystem::delete(8, file_path, inode_num as usize);
     println!("{} deleted", file_path);
 }
 

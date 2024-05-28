@@ -901,7 +901,6 @@ impl MinixFileSystem {
         new_file_path.push_str(filename);
         btm.insert(new_file_path, new_inode);
     }
-    
 
     pub fn stat(&self, inode: &Inode) -> Stat {
         Stat {
