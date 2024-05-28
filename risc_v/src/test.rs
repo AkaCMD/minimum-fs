@@ -65,7 +65,6 @@ fn test_read_file_with_inode(inode_num: u32) {
         print!("{}", unsafe { buffer.get_mut().add(i).read() as char });
     }
     println!();
-    kfree(buffer.get_mut());
 }
 
 fn test_find_free_inode() {
@@ -86,7 +85,6 @@ fn test_block_driver() {
             println!();
         }
     }
-    kmem::kfree(buffer.get_mut());
     println!("Block driver done");
 }
 
@@ -107,7 +105,6 @@ fn test_open_file(path: &str) {
         print!("{}", unsafe { buffer.get_mut().add(i).read() as char });
     }
     println!();
-    kfree(buffer.get_mut());
 }
 
 // Writing to block and read back
@@ -141,7 +138,6 @@ fn test_write_block() {
             println!();
         }
     }
-    kfree(read_buffer.get_mut());
     println!("\nWrite to block driver done!");
 }
 
